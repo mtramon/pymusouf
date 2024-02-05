@@ -397,9 +397,9 @@ chmap32 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "ma
 chmap16 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
 front_panel = Panel(matrix = matrixv2_0, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap32)
 front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
+middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,710), channelmap=chmap16)
 middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap32)
+rear_panel = Panel(matrix = matrixv2_0, ID=2, position=Position(PositionEnum.Rear,1400), channelmap=chmap32)
 rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap32) 
 conf_name = '3p1'
 Config_3p1_32x32 = PanelConfig(name = conf_name, 
