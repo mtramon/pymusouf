@@ -13,9 +13,9 @@ run :
   tomo : 
       TOMO3_M2 :
         rawdata :  
-          - ../data/COP/subset/raw/
+          - /gpfs/users/mtramonti/datasets/copahue/TOMO/
         recodata : 
-          - ../data/COP/subset/reco/
+          - /gpfs/users/mtramonti/muon/pymusouf_output/COP_TOMO_pymusouf/
       
 
 

@@ -19,8 +19,8 @@ REQUIREMENTS = [
     'iminuit', #used in 'utils/functions.py'
     'pyyaml',
     'palettable', 
-    # 'requests', 
-    # 'bs4', 
+    'requests', 
+    'bs4', 
     # 'cx_Freeze', #make executable files
     'mat73', #read v7.3 mat files
     'pillow', #for .gif animation

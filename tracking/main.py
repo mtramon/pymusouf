@@ -28,7 +28,8 @@ description='''For a given muon telescope configuration, this script allows to p
 parser.add_argument('--telescope', '-tel', default=DICT_TEL["COP"], help='Input telescope name. It provides the associated configuration.', type=str2telescope)
 parser.add_argument('--input_data', '-i', default=[], nargs="*", help='/path/to/datafile/  One can input a data directory, a single datfile, or a list of data files e.g "--input_data <file1.dat> <file2.dat>"', type=str)
 # parser.add_argument('--input_data', '-i', default=None, help='/path/to/datafile/  One can input a data directory, a single datfile, or a list of data files e.g "--input_data <file1.dat> <file2.dat>"', type=str)
-parser.add_argument('--out_dir', '-o', default='out', help='Path to processing output', type=str) 
+# parser.add_argument('--out_dir', '-o', default='out', help='Path to processing output', type=str) 
+parser.add_argument('--out_dir', '-o', default=[], help='Path to processing output', type=str) 
 parser.add_argument('--input_type', '-it', default='real',  help="'real' or 'mc'", type=str)
 parser.add_argument('--max_nfiles', '-max', default=1, help='Maximum number of dataset files to process.', type=int)
 parser.add_argument('--residual_threshold', '-rt', default=50, help='RANSAC "distance-to-model" parameter: "residual_threshold" in mm.',type=float)
@@ -68,6 +69,8 @@ kwargs_ransac = dict(residual_threshold=args.residual_threshold,
 logging.info('\nRansac Tracking...\n')
 rawdata_path = [ Path(p) for p in args.input_data ]
 
+# print("Cantidad de datos: " + len(rawdata_path)+"\n")
+
 runs = []
 if len(rawdata_path) == 0 : 
     runs = survey.run_tomo
@@ -106,6 +109,8 @@ t_sec = round(time.time() - start_time)
 (t_min, t_sec) = divmod(t_sec,60)
 (t_hour,t_min) = divmod(t_min,60)
 t_end = 'Duration : {}hour:{}min:{}sec'.format(t_hour,t_min,t_sec)
+print(t_end)
+
 logging.info(t_end)
 
 logging.info(f"Output directory : {reco_dir}")
