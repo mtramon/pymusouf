@@ -25,7 +25,7 @@ t_start = time.perf_counter()
 home_path = os.environ["HOME"]
 parser=argparse.ArgumentParser(
 description='''For a given muon telescope configuration, this script allows to perform RANSAC tracking and outputs trajectrory-panel crossing XY coordinates''', epilog="""All is well that ends well.""")
-parser.add_argument('--telescope', '-tel', default=DICT_TEL["COP"], help='Input telescope name. It provides the associated configuration.', type=str2telescope)
+parser.add_argument('--telescope', '-tel', default=DICT_TEL["SXF"], help='Input telescope name. It provides the associated configuration.', type=str2telescope)
 parser.add_argument('--input_data', '-i', default=[], nargs="*", help='/path/to/datafile/  One can input a data directory, a single datfile, or a list of data files e.g "--input_data <file1.dat> <file2.dat>"', type=str)
 # parser.add_argument('--input_data', '-i', default=None, help='/path/to/datafile/  One can input a data directory, a single datfile, or a list of data files e.g "--input_data <file1.dat> <file2.dat>"', type=str)
 # parser.add_argument('--out_dir', '-o', default='out', help='Path to processing output', type=str) 

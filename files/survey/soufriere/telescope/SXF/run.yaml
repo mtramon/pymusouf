@@ -13,7 +13,7 @@ run :
   tomo : 
       tomo_3dat :
         rawdata :  
-          - ../data/SXF/tomo/rawdata
+          - /gpfs/users/mtramonti/datasets/SuperXFaille/TOMO/
         recodata : 
-          - ../data/SXF/tomo/reco 
+          - /gpfs/users/mtramonti/muon/pymusouf_output/SXF_TOMO_pymusouf/
       

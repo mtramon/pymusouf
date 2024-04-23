@@ -13,7 +13,7 @@ run :
   tomo : 
       tomo_3dat :
         rawdata :  
-          - ../data/SBR/tomo/rawdata
+          - /gpfs/users/mtramonti/datasets/SuperBaronRouge/TOMO/
         recodata : 
-          - ../data/SBR/tomo/reco 
+          - /gpfs/users/mtramonti/muon/pymusouf_output/SBR_TOMO_pymusouf/
       
