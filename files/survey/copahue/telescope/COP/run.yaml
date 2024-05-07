@@ -6,9 +6,9 @@ run :
   calib : 
       calib:
         rawdata :  
-          - ../data/COP/subset/raw/
+          - /gpfs/users/mtramonti/datasets/LaPlata/Zen00/CALIB5/
         recodata : 
-          - ../data/COP/subset/reco/ 
+          - /gpfs/users/mtramonti/muon/pymusouf_output/LP_CALIB5_pymusouf/
 
   tomo : 
       TOMO3_M2 :
@@ -16,6 +16,4 @@ run :
           - /gpfs/users/mtramonti/datasets/copahue/TOMO/
         recodata : 
           - /gpfs/users/mtramonti/muon/pymusouf_output/COP_TOMO_pymusouf/
-      
-
 

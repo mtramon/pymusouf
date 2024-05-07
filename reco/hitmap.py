@@ -62,7 +62,7 @@ class HitMap:
         for name, conf in self.tel.configurations.items():
             #hit tel config maps
             panels = conf.panels
-            front, rear = panels[0].position.loc, panels[-1].position.loc
+            front, rear = panels[0].position.loc, panels[-1].position.loc            
             ((xminf, xmaxf), (yminf, ymaxf)) = self.rangeXY[front]
             ((xminr, xmaxr), (yminr, ymaxr)) = self.rangeXY[rear]
             xposf, yposf = f"X_{front}", f"Y_{front}"
@@ -80,15 +80,18 @@ class HitMap:
             else : 
                 idx  = self.df[sel].index
 
-            dftmp = self.df.loc[idx] 
+            dftmp = self.df[sel]
             ts, tns = dftmp['timestamp_s'].values, dftmp['timestamp_ns'].values
             DX, DY =  dftmp[xposf].values - dftmp[xposr].values, dftmp[yposf].values - dftmp[yposr].values
             dfconf = pd.DataFrame(index=idx, data=np.array([ts, tns, DX, DY]).T, columns=['timestamp_s', 'timestamp_ns', f'DX_{name}', f'DY_{name}'])
             self.df_DXDY[name] = dfconf
-            self.h_DXDY[name] = np.histogram2d(DX, DY, bins=self.binsDXDY[name], range=self.rangeDXDY[name] )[0]
+            self.h_DXDY[name] = np.histogram2d(DX, DY, bins=self.binsDXDY[name], range=self.rangeDXDY[name])[0]
+
+            # Update self.hDXDY with data from self.h_DXDY
+            self.hDXDY = self.h_DXDY.copy()
        
 
-    def plot_xy_map(self, invert_yaxis:bool=False, transpose:bool=False):
+    def plot_xy_map(self, invert_yaxis:bool=True, transpose:bool=False):
         """Plot hit map for reconstructed primaries and all primaries"""
         fig, fax = plt.subplots(figsize=(8, 12), nrows=len(self.panels), ncols=1, sharex=True)
         for i, p in enumerate(self.panels):  
@@ -112,11 +115,11 @@ class HitMap:
         fig.tight_layout()
 
         
-    def plot_dxdy_map(self, invert_xaxis:bool=True, invert_yaxis:bool=False, transpose:bool=False, fliplr:bool=False, flipud:bool=False):
+    def plot_dxdy_map(self, invert_xaxis:bool=True, invert_yaxis:bool=True, transpose:bool=False, fliplr:bool=False, flipud:bool=False):
         """
         Args:
             invert_xaxis (bool, optional): _description_. Defaults to True.
-            invert_yaxis (bool, optional): _description_. Defaults to False.
+            invert_yaxis (bool, optional): _description_. Defaults to True.
             transpose (bool, optional): _description_. Defaults to False.
             fliplr (bool, optional): _description_. Defaults to False.
             flipud (bool, optional): _description_. Defaults to False.
@@ -145,6 +148,7 @@ class HitMap:
             cax1 = divider1.append_axes("right", size="5%", pad=0.05)
             cbar = fig.colorbar(im, cax=cax1, extend='max')
             cbar.set_label(label='entries')
+            ax.set_title(name) 
         fig.tight_layout()
 
 

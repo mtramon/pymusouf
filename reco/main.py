@@ -59,7 +59,12 @@ hmDXDY  = {}
 print("Hit Map(s)")
 hm = HitMap(telescope=tel, df=reco_file.df)
 ##loop on DXDY histograms (one per tel config) and save it as .txt files
-for c, h in  hm.hDXDY.items():  np.savetxt(hm_files[c], h, delimiter='\t', fmt='%.5e')
+# Check if hm.hDXDY.items() is empty
+if not hm.hDXDY.items():
+    print("No data found in hm.hDXDY.items().")
+else:
+    for c, h in hm.hDXDY.items():
+        np.savetxt(hm_files[c], h, delimiter='\t', fmt='%.5e')
 
 npan = len(tel.panels)
 hm.plot_xy_map(transpose=True) #hits per panel

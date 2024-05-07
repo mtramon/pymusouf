@@ -25,7 +25,7 @@ t_start = time.perf_counter()
 home_path = os.environ["HOME"]
 parser=argparse.ArgumentParser(
 description='''For a given muon telescope configuration, this script allows to perform RANSAC tracking and outputs trajectrory-panel crossing XY coordinates''', epilog="""All is well that ends well.""")
-parser.add_argument('--telescope', '-tel', default=DICT_TEL["SXF"], help='Input telescope name. It provides the associated configuration.', type=str2telescope)
+parser.add_argument('--telescope', '-tel', default=DICT_TEL['COP'], help='Input telescope name. It provides the associated configuration.', type=str2telescope)
 parser.add_argument('--input_data', '-i', default=[], nargs="*", help='/path/to/datafile/  One can input a data directory, a single datfile, or a list of data files e.g "--input_data <file1.dat> <file2.dat>"', type=str)
 parser.add_argument('--out_dir', '-o', default=[], help='Path to processing output', type=str) 
 parser.add_argument('--input_type', '-it', default='real',  help="'real' or 'mc'", type=str)
@@ -38,7 +38,7 @@ parser.add_argument('--info', '-info', default=None, help='Additional info',type
 parser.add_argument('--progress_bar', '-bar', default=False, help='Display progress bar',type=str2bool)
 args=parser.parse_args()
 
-survey = CURRENT_SURVEY[args.telescope.name]
+# survey = CURRENT_SURVEY[args.telescope.name]
 
 out_dir = Path(args.out_dir)
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -67,16 +67,14 @@ kwargs_ransac = dict(residual_threshold=args.residual_threshold,
 logging.info('\nRansac Tracking...\n')
 rawdata_path = [ Path(p) for p in args.input_data ]
 
-print("DEBUG - Cantidad de datos: " + str(len(rawdata_path))+"\n")
-
 runs = []
-if len(rawdata_path) == 0 : 
-    runs = survey.run_tomo
-else : 
-    for praw in rawdata_path: 
-        raw = RawData(path=praw)
-        run = Run(name = praw, telescope = args.telescope, rawdata = [raw])
-        runs.append(run)
+# if len(rawdata_path) == 0 : 
+     # runs = survey.run_tomo
+#else : 
+for praw in rawdata_path: 
+    raw = RawData(path=praw)
+    run = Run(name = praw, telescope = args.telescope, rawdata = [raw])
+    runs.append(run)
 
 n, nruns = 0, len(runs)
 for run in runs:
