@@ -237,7 +237,7 @@ class Telescope:
         if self.rays is None : self.get_ray_paths(front_panel=front_panel, rear_panel=rear_panel, rmax=rmax)
         if mask is not None: self.rays[mask,:] = [np.ones(3)*np.nan, np.ones(3)*np.nan]
         for k in range(self.rays.shape[0]):       
-            ax.scatter(self.rays[k,-1, 0], self.rays[k,-1, 1], self.rays[k,-1, 2], c=color_values[k], **kwargs)    
+            ax.scatter(self.rays[k,-1, 0], self.rays[k,-1, 1], self.rays[k,-1, 2], color=color_values[k], **kwargs)    
 
     def compute_angle_matrix(self):
         
@@ -603,7 +603,6 @@ def str2telescope(v):
 
 
 if __name__ == '__main__':
-    print(tel_SNJ)
-
+    print(tel_COP)
 
 

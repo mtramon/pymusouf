@@ -80,10 +80,10 @@ souf_survey.set_surface_grid(grid = souf_grid, xy_center = souf_xy_center)
 
 cop_survey = DICT_SURVEY['copahue']
 dem_path = cop_survey.path / "dem"
-filename_grid = "copahueStructure.npy" #res 1m
+filename_grid = "copahueStructure.npy"
 cop_survey.dem_file = dem_path / filename_grid
-# cop_grid = np.load(dem_path / filename_grid)
-# cop_survey.set_surface_grid(grid = cop_grid)
+cop_grid = np.load(dem_path / filename_grid)
+cop_survey.set_surface_grid(grid = cop_grid)
 
 CURRENT_SURVEY = DICT_SURVEY[CURRENT_SURVEY_NAME]
 

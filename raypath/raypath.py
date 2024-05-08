@@ -11,7 +11,7 @@ import os
 import pickle
 #personal modules
 from config import MAIN_PATH
-from survey import DICT_SURVEY
+from survey import DICT_SURVEY, CURRENT_SURVEY
 from telescope import Telescope
 
 class RayPath:
@@ -94,13 +94,14 @@ class RayPath:
         topo_alt = finterp((tx, ty ))
         isTelescopeUnderground = False
 
+        '''
         if tz <= topo_alt: 
             # weird behaviour if isTelescopeUnderground
             isTelescopeUnderground = True
             msg = 'Telescope undergound -> increase altitude telescope'
             raise ValueError(msg)
         else : pass 
-        
+        '''
 
         azimuths = self.azimuthMatrix * 180/np.pi
         zeniths = self.zenithMatrix * 180/np.pi
@@ -261,144 +262,41 @@ class RayPath:
         ) 
 
 
-RayPathSoufriere = { }
-survey = DICT_SURVEY['soufriere']
-dem_filename = "soufriereStructure_2.npy" #5m resolution 
-dem_path = survey.path / "dem"
-main_tel_path = survey.path / "telescope" 
-surface_grid = np.load(dem_path / dem_filename)
+if CURRENT_SURVEY == 'soufriere':
 
-for _, run in survey.runs.items(): 
+    RayPathSoufriere = { }
+    survey = DICT_SURVEY['soufriere']
+    dem_filename = "soufriereStructure_2.npy" #5m resolution 
+    dem_path = survey.path / "dem"
+    main_tel_path = survey.path / "telescope" 
+    surface_grid = np.load(dem_path / dem_filename)
 
-    tel = run.telescope
-    tel_path = main_tel_path / tel.name
-    raypath= RayPath(telescope=tel, surface_grid=surface_grid)
-    fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
-    raypath(file=fout, max_range=1500)
-    RayPathSoufriere[tel.name] = raypath
+    for _, run in survey.runs.items(): 
 
+        tel = run.telescope
+        tel_path = main_tel_path / tel.name
+        raypath= RayPath(telescope=tel, surface_grid=surface_grid)
+        fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
+        raypath(file=fout, max_range=1500)
+        RayPathSoufriere[tel.name] = raypath
 
-RayPathCopahue = { }
-survey = DICT_SURVEY['copahue']
-dem_filename = "copahueStructure.npy" #5m resolution 
-dem_path = survey.path / "dem"
-main_tel_path = survey.path / "telescope" 
-surface_grid = np.load(dem_path / dem_filename)
+else:
 
-for _, run in survey.runs.items(): 
+    RayPathCopahue = { }
+    survey = DICT_SURVEY['copahue']
+    dem_filename = "copahueStructure.npy" #5m resolution 
+    dem_path = survey.path / "dem"
+    main_tel_path = survey.path / "telescope" 
+    surface_grid = np.load(dem_path / dem_filename)
 
-    tel = run.telescope
-    tel_path = main_tel_path / tel.name
-    raypath= RayPath(telescope=tel, surface_grid=surface_grid)
-    fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
-    raypath(file=fout, max_range=1500)
-    RayPathCopahue[tel.name] = raypath
+    for _, run in survey.runs.items(): 
+
+        tel = run.telescope
+        tel_path = main_tel_path / tel.name
+        raypath= RayPath(telescope=tel, surface_grid=surface_grid)
+        fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
+        raypath(file=fout, max_range=1500)
+        RayPathCopahue[tel.name] = raypath
 
 if __name__ == "__main__":
    pass
-
-   
-
-'''
-    
-    def getApparentOpenSkyThickness(self):
-        ndx, ndy = self.azimuthMatrix.shape
-        apparentThicknessFront, apparentThicknessRear = np.zeros(shape=(ndx, ndy)), np.zeros(shape=(ndx, ndy))
-        d = 2000 # m
-        NN = 2000
-        k = 0
-        #eps = 0.02
-        #az0, ze0 = 5.181999e+01, 7.124958e+01
-        for i in range(ndx): 
-            for j in range(ndy):
-                az, ze = self.azimuthMatrix[i,j], self.zenithMatrix[i,j]
-                # if ((1-eps)*az0 <= az*180/np.pi) and (az*180/np.pi <= (1+eps)*az0) :
-                #     if ((1-eps)*ze0 <= ze*180/np.pi) and (ze*180/np.pi <= (1+eps)*ze0):
-                #         pass
-                #     else : continue
-                # else: 
-                #     continue
-                #if k > 1 : break
-                #if ze*180/np.pi < 70 : continue
-                #print(f"az, ze = {az*180/np.pi:.2f}, {ze*180/np.pi:.2f}")
-                #print(k)
-                #k+=1
-                
-                uxF = np.linspace(self.tx,(self.tx + d*np.cos(np.pi/2-az)*np.sin(ze)), NN)
-                uyF = np.linspace(self.ty,(self.ty + d*np.sin(np.pi/2-az)*np.sin(ze)), NN)
-                uzF = np.linspace(self.tz,(self.tz + d*np.cos(ze)),NN)
-
-                uxR = np.linspace(self.tx,(self.tx - d*np.cos(np.pi/2-az)*np.sin(ze)), NN)
-                uyR = np.linspace(self.ty,(self.ty - d*np.sin(np.pi/2-az)*np.sin(ze)), NN)
-                uzR = np.linspace(self.tz,(self.tz - d*np.cos(ze)), NN)
-                
-                #replace with griddata
-                points, values = np.array([self.SX.flatten(), self.SY.flatten()]).T, self.SZ.flatten()
-                ZIF, ZIR = griddata(points, values, (uxF, uyF) ), griddata(points, values, (uxR, uyR) )
-                #print(f"ZIF = {ZIF}, {np.all(np.isnan(ZIF))}, {ZIF.shape}")
-                intersecF = np.argwhere(abs(np.diff((ZIF-uzF)>0)) == 1).flatten()  #find(abs(diff((ZIF-uzF)>0)) == 1)
-                #print(len(intersecF), intersecF[:10])
-                intersecR = np.argwhere(abs(np.diff((ZIR-uzR)>0)) == 1).flatten()
-
-                #print(intersecF,intersecF.shape)
-
-                nF, nR = len(intersecF), len(intersecR)
-                #print(f"nF, nR = {nF}, {nR}")
-                #continue
-                minIF, minIR = np.nanmin((len(uzF), np.sum(~np.isnan(ZIF))))-1, np.nanmin((len(uzR)-1, np.sum(~np.isnan(ZIR))))-1
-                #print(f"len(uzF), np.sum(~np.isnan(ZIF) = {len(uzF)}, {np.sum(~np.isnan(ZIF))}")
-                #print(f"minIF, minIR = {minIF}, {minIR}")
-                #print(f"ZIF[minIF], uzF[minIF] = {ZIF[minIF]}, {uzF[minIF]}")
-                #continue
-                if (ZIF[minIF] > uzF[minIF]): # apparent thickness too important
-                    #print("too thick")
-                    apparentThicknessFront[i,j] = np.nan
-                
-                elif (nF == 0): # pointing the sky
-                    #print("sky")
-                    apparentThicknessFront[i,j] = np.nan
-                
-                elif (ZIF[minIF] < uzF[minIF]):
-                    #print("ZIF[minIF] < uzF[minIF]")
-                    if (nF > 1):
-                        if nF% 2 == 0: # or (np.mod(nF,2) == 0): 
-                        
-                            distanceInMatter = 0        
-                            for k in range(0, nF-1, 2): #increment of 2
-                                distanceInMatter = distanceInMatter + np.sqrt((uxF[intersecF[k]]-uxF[intersecF[k+1]])**2+(uyF[intersecF[k]]-uyF[intersecF[k+1]])**2+(ZIF[intersecF[k]]-ZIF[intersecF[k+1]])**2)
-                            apparentThicknessFront[i,j] = distanceInMatter
-                        
-                        else:               
-                            apparentThicknessFront[i,j] = np.nan             
-                else: pass
-                
-                if (ZIR[minIR] > uzR[minIR]): # apparent thickness too important
-                    apparentThicknessRear[i,j] = np.nan
-                
-                elif (nR == 0): # pointing the sky
-                    apparentThicknessRear[i,j] = np.nan
-                
-                elif (ZIR[minIR] < uzR[minIR]):
-                    if (nR > 1):
-                        if nR% 2 == 0: # or np.mod(nR,2) == 0):
-
-                            distanceInMatter = 0         
-                            for k in range(0, nR-1, 2): #increment of 2
-                                distanceInMatter = distanceInMatter + np.sqrt((uxR[intersecR[k]]-uxR[intersecR[k+1]])**2+(uyR[intersecR[k]]-uyR[intersecR[k+1]])**2+(ZIR[intersecR[k]]-ZIR[intersecR[k+1]])**2)
-                            
-
-                            apparentThicknessRear[i,j] = distanceInMatter
-
-                        else:          
-                            apparentThicknessRear[i,j] = np.nan                
-                else: pass
-                
-                #print(f"(tF, tR) = {apparentThicknessFront[i,j]:.3f}, {apparentThicknessRear[i,j]:.3f}")
-
-            
-        self.apparentThicknessFront = apparentThicknessFront
-        self.apparentThicknessRear  = apparentThicknessRear
-
-
-
-'''

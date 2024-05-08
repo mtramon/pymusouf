@@ -15,6 +15,7 @@ fcop = survey.path / "dem" / "copahueStructure.npy"
 # cop_grid = loadmat(fcop)
 # print(f'cop_grid = {cop_grid}')
 
+
 import pickle
 
 # fpkl_cop = "/opt/homebrew/lib/python3.11/site-packages/files/survey/copahue/telescope/COP/raypath/az262.0_elev4.0/raypath.pkl"
@@ -29,4 +30,3 @@ rp(file=fout, max_range=1500)
 souf_survey = DICT_SURVEY['soufriere']
 souf_grid = souf_survey.surface_grid 
 # print(f'souf_grid = {souf_grid.shape}')
-

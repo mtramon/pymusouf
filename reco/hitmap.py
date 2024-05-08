@@ -91,7 +91,7 @@ class HitMap:
             self.hDXDY = self.h_DXDY.copy()
        
 
-    def plot_xy_map(self, invert_yaxis:bool=True, transpose:bool=False):
+    def plot_xy_map(self, invert_yaxis:bool=True, transpose:bool=False, invert_xaxis:bool=True):
         """Plot hit map for reconstructed primaries and all primaries"""
         fig, fax = plt.subplots(figsize=(8, 12), nrows=len(self.panels), ncols=1, sharex=True)
         for i, p in enumerate(self.panels):  
@@ -106,6 +106,7 @@ class HitMap:
             if transpose: 
                 ax.hist2d(Y, X, cmap='viridis', bins=self.binsXY[key], range=self.rangeXY[key] ) #im1 = ax.imshow(hXY[i])
             if invert_yaxis: ax.invert_yaxis()
+            if invert_xaxis: ax.invert_xaxis()
             if i == len(self.panels)-1 : ax.set_xlabel('Y')
             ax.set_ylabel('X')
             divider1 = make_axes_locatable(ax)
@@ -115,10 +116,10 @@ class HitMap:
         fig.tight_layout()
 
         
-    def plot_dxdy_map(self, invert_xaxis:bool=True, invert_yaxis:bool=True, transpose:bool=False, fliplr:bool=False, flipud:bool=False):
+    def plot_dxdy_map(self, invert_xaxis:bool=False, invert_yaxis:bool=True, transpose:bool=False, fliplr:bool=False, flipud:bool=False):
         """
         Args:
-            invert_xaxis (bool, optional): _description_. Defaults to True.
+            invert_xaxis (bool, optional): _description_. Defaults to False.
             invert_yaxis (bool, optional): _description_. Defaults to True.
             transpose (bool, optional): _description_. Defaults to False.
             fliplr (bool, optional): _description_. Defaults to False.
