@@ -40,30 +40,48 @@ class EvtRate:
         self.mean = 0
 
     def __call__(self, ax, width:float=3600, label:str="",  t_off:float=0., tlim=None, **kwargs):
-        if tlim is None: tlim =  ( 0, int(datetime(2032, 4, 2, hour=16,minute=00,second=00).replace(tzinfo=timezone.utc).timestamp())   )
+        if tlim is None:
+            tlim =  ( 0, int(datetime(2032, 4, 2, hour=16,minute=00,second=00).replace(tzinfo=timezone.utc).timestamp()))
         t_min, t_max = tlim
-        if t_min > t_max: raise ArgumentError("t_min > t_max")
+
+        if t_min > t_max: 
+            raise ArgumentError("t_min > t_max")
+        
         mask = (t_min <= self.ts) & (self.ts <= t_max)
         time = self.ts[mask].values
-        t_start = int(np.min(time))
-        t_end = int(np.max(time))
+        t_start,  t_end = int(np.min(time)), int(np.max(time))
+
         date_start = datetime.fromtimestamp(t_start+t_off)
         self.start = date_start
-        date_start = date(date_start.year, date_start.month, date_start.day )#str(datetime.fromtimestamp(data_tomo[:, 1][0]))
+        date_start = date(date_start.year, date_start.month, date_start.day)#str(datetime.fromtimestamp(data_tomo[:, 1][0]))
         date_end = datetime.fromtimestamp(t_end+t_off)
         self.end = date_end
-        date_end = date(date_end.year, date_end.month, date_end.day )#str(datetime.fromtimestamp(data_tomo[:, 1][-1]))
+        date_end = date(date_end.year, date_end.month, date_end.day) #str(datetime.fromtimestamp(data_tomo[:, 1][-1]))
         self.date_start, self.date_end=  date_start, date_end
+
         ntimebins = int(abs(t_end - t_start)/width) #hour
-        (self.entries, self.tbin, self.patch) = ax.hist(time, bins=ntimebins, edgecolor='None', label=f"{label}\nnevts={len(time):1.3e}", **kwargs)
-        datetime_ticks = [datetime.fromtimestamp(int(ts)).strftime('%d/%m %H:%M') for ts in ax.get_xticks()]
+        # self.entries, self.tbin, self.patch = ax.hist(time, bins=ntimebins, edgecolor='None', label=f"{label}\nnevts={len(time):1.3e}", **kwargs)
+        self.entries, self.tbin, self.patch = ax.hist(time, bins=ntimebins, edgecolor='None', **kwargs)
+
+        datetime_ticks = [datetime.fromtimestamp(int(ts)).strftime('%d/%m') for ts in ax.get_xticks()]
         ax.set_xticklabels(datetime_ticks)
-        ax.set_ylabel("nevents")
-        ax.set_xlabel("time")
-        title =  f"Event time distribution from {str(date_start)} to {str(date_end)}"
+        ax.set_yscale('log')
+        ax.set_ylabel(r"$N_\mu \ [h^{-1}]$")
+        ax.set_xlabel("Time [dd/mm]")
+        title =  (f"Event time distribution from {str(date_start)} to {str(date_end)} \n"
+                  f"Acquisition time:  ~{self.run_duration/(24*3600):5.1f} days \n"
+                  f"# events: {len(time):d} \n"
+                  f"~ {int((len(time)/(self.run_duration/(24*3600)))):d} events per day")
         ax.set_title(title)
-        #plt.figtext(.5,.95, title, ha='center')
-        plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
+
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+        # plt.ticklabel_format(axis="y", style="sci", scilimits=(0,0))
+
+        # adjust y axis
+        max_count = max(plt.gca().get_ylim())
+        min_count = min(plt.gca().get_ylim())
+        new_ylim = (min_count/np.sqrt(10), max_count*np.sqrt(10))
+        plt.gca().set_ylim(new_ylim)
     
     def to_csv(self, file:Union[str, Path], **kwargs):
         tbinc = (self.tbin[:-1] +  self.tbin[1:]) / 2
