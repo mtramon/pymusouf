@@ -1,6 +1,8 @@
 .DS_Store
 .venv
 .vscode
+.pymusouf
+debug/
 */__pycache__
 */*/__pycache__
 pymusouf.egg-info/
