@@ -139,7 +139,7 @@ class HitMap:
             if transpose: h = h.T
             if fliplr : h = np.fliplr(h)
             if flipud : h = np.flipud(h)
-            h[h==0] = np.nan 
+            h[h==0] = np.nan
             im = ax.imshow(h, cmap='viridis', norm=LogNorm(vmin=1, vmax=np.max(h[~np.isnan(h)])), extent=[DX_min, DX_max, DY_min, DY_max] )
             ax.grid(False)
             #hist, xedges, yedges, im1 = ax1.hist2d( DY[c], DX[c], edgecolor='black', linewidth=0., bins=self.binsDXDY[c], range=self.rangeDXDY[c], weights=None, cmap='viridis', norm=LogNorm(vmin=1, vmax=np.max(self.hDXDY[c]) ) ) #    

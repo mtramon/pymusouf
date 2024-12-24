@@ -119,7 +119,7 @@ class ImpactPM:
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
        
 
-    def fill_panel_impacts(self,channelmap:ChannelMap, nPM:int, zpos:dict, minPlan:int=6, scint_eff:float=None, langau:dict=None):
+    def fill_panel_impacts(self,channelmap:ChannelMap, nPM:int, zpos:dict, minPlan:int=6, scint_eff:float=None, langau:dict=None, tel_name:str = None, maxPlan:int=7):
        
         chmap  = channelmap.dict_ch_to_bar
         ch_keys = list(chmap.keys())
@@ -127,14 +127,37 @@ class ImpactPM:
         for adc, ch in zip(self._adc, self._channel_no):
             if ch not in ch_keys: 
                 continue
+            
             if nPM == 2:
-                ####SBR & SXF config
-                if ch%8 <= 3 : 
-                    panID = 2*(self.pmID - minPlan) 
-                elif ch%8 >= 4 :
-                    panID = 2*(self.pmID - minPlan)+1  
-                else : 
-                    raise f"Issue with channel {ch}"
+                if tel_name == 'SBR':
+                    # SBR configuration
+                    if ch % 8 <= 3:
+                        panID = 2 * (self.pmID - minPlan)
+                    elif ch % 8 >= 4:
+                        panID = 2 * (self.pmID - minPlan) + 1
+                    else:
+                        raise ValueError(f"Issue with channel {ch}")
+                    
+                elif tel_name == 'SXF':
+                    # SXF configuration
+                    if ch % 8 <= 3:
+                        panID = 2 * (maxPlan - self.pmID)
+                    elif ch % 8 >= 4:
+                        panID = 2 * (maxPlan - self.pmID) + 1
+                    else:
+                        raise ValueError(f"Issue with channel {ch}")
+                else:
+                    raise ValueError(f"Unknown tel_name: {tel_name}")
+            
+            # if nPM == 2:
+            #     ####SBR & SXF config
+            #     if ch%8 <= 3 : 
+            #         panID = 2*(self.pmID - minPlan) 
+            #     elif ch%8 >= 4 :
+            #         panID = 2*(self.pmID - minPlan)+1  
+            #     else : 
+            #         raise f"Issue with channel {ch}"
+                
             elif nPM == 3 or nPM == 4:
                 panID = self.pmID
             else: 
@@ -610,6 +633,7 @@ class RansacTracking(Tracking):
         
         nPM = len(self.tel.pmts)
         minPlan = np.min([pm.ID for pm in self.tel.pmts])
+        maxPlan = np.max([pm.ID for pm in self.tel.pmts])
         last_evtID = 0
         barwidths = { i :  float(p.matrix.scintillator.width) for i,p  in self.panels.items() }
 
@@ -630,7 +654,8 @@ class RansacTracking(Tracking):
             pmt = self.pmts[impm.pmID]
             channelmap = pmt.channelmap
             #create panel impacts
-            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+            # impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name = self.tel.name, maxPlan=maxPlan)
             evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
 
             #Add impacts (impacted panels) to evt
@@ -644,7 +669,8 @@ class RansacTracking(Tracking):
                 impm = ImpactPM(line=line)
                 pmt = self.pmts[impm.pmID]
                 channelmap = pmt.channelmap
-                impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+                # impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+                impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
                 
                 if impm.evtID == last_evtID:
                     for pid, imp in impm.impacts.items() : 
@@ -655,7 +681,8 @@ class RansacTracking(Tracking):
                         continue
                 #if new evtID, retrieve the last evtID and reconstruct it 
                 #get coordinates 
-                evt.get_xyz(in_mm=True, width=barwidths, zpos=self.zpos)
+                # evt.get_xyz(in_mm=True, width=barwidths, zpos=self.zpos)
+                evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
 
                 iscut, _ = self.filter(evt)
                 if iscut:

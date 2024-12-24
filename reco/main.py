@@ -27,14 +27,14 @@ parser=argparse.ArgumentParser(
 description='''Check track reconstruction processing output (hitmaps, event rate, charge distributions)''', epilog="""All is well that ends well.""")
 parser.add_argument('--telescope', '-tel', default="SNJ", help='Input telescope name (e.g "COP"). It provides the associated configuration.',  type=str2telescope)
 parser.add_argument('--in_dir', '-i', help="/path/to/reco/files", type=str, required=True)
-parser.add_argument('--out_dir', '-o', default=f"{str(wd_dir)}/out/", help="/path/to/out/dir/", type=str)
+parser.add_argument('--out_dir', '-o', help="/path/to/out/dir/", type=str, required=True)
 args=parser.parse_args()
 
 tel = args.telescope
 sconfig = list(tel.configurations.keys())
 nc = len(sconfig)
-in_dir =  Path(args.in_dir )
-out_dir = Path(args.out_dir )
+in_dir =  Path(args.in_dir)
+out_dir = Path(args.out_dir)
 out_dir.mkdir(parents=True, exist_ok=True)
 
 ###Get reco and inlier files

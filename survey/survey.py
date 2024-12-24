@@ -50,7 +50,7 @@ class Survey:
 
         self.surface_center = xy_center
 
-DICT_TELNAME_SURVEY = {sur : [t.split('/')[-1] for t in  glob.glob( str(SURVEY_DIR / sur / 'telescope') + '/**' ) ]  
+DICT_TELNAME_SURVEY = {sur : [Path(t).name for t in  glob.glob( str(SURVEY_DIR / sur / 'telescope') + '/**' ) ]  
                        for sur in LIST_AVAIL_SURVEY}
 
 DICT_SURVEY = {sur_name : Survey() for sur_name in LIST_AVAIL_SURVEY}

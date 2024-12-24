@@ -22,7 +22,7 @@ start_time = time.time()
 t0 = time.strftime("%H:%M:%S", time.localtime())
 print("Start: ", t0)#start time
 t_start = time.perf_counter()
-home_path = os.environ["HOME"]
+home_path = Path.home()
 parser=argparse.ArgumentParser(
 description='''For a given muon telescope configuration, this script allows to perform RANSAC tracking and outputs trajectrory-panel crossing XY coordinates''', epilog="""All is well that ends well.""")
 parser.add_argument('--telescope', '-tel', required=True, help='Input telescope name. It provides the associated configuration.', type=str2telescope)
