@@ -600,6 +600,7 @@ class RansacTracking(Tracking):
                 else:
                     dtype = int
                 self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
+
     def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=True, **kwargs_model)-> None:
         """
         Process tracking data files event-by-event.
@@ -612,9 +613,6 @@ class RansacTracking(Tracking):
         Returns:
             None
         """
-        '''
-        Process tracking data files event-by-event
-        '''
         
         nPM = len(self.tel.pmts)
         minPlan = np.min([pm.ID for pm in self.tel.pmts])
@@ -628,6 +626,9 @@ class RansacTracking(Tracking):
 
         nfiles = len(self.data.dataset)
         ntrack = 0
+
+        df_track_list = []
+        df_model_list = []
 
         for nf, file in enumerate(self.data.dataset):
             print(f"Processing file {nf+1}/{nfiles}: {file}")
@@ -663,7 +664,7 @@ class RansacTracking(Tracking):
                     else:
                         remaining_str = "calculating..."
                     
-                    logging.debug(f"Processing line {nl+1}/{len(lines)} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
+                    logging.info(f"Processing line {nl+1}/{len(lines)} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
                      
                 impm = ImpactPM(line=line)
                 pmt = self.pmts[impm.pmID]
@@ -709,13 +710,11 @@ class RansacTracking(Tracking):
                         #print(f"Valid track found for event {evt.ID}")
 
                         _df_trk = model.get_df_track(dict_zloc=self.zloc)
-                        if ntrack == 0 :   self.df_track = _df_trk
-                        else : self.df_track = pd.concat([self.df_track.astype(_df_trk.dtypes), _df_trk.astype(self.df_track.dtypes)])
+                        df_track_list.append(_df_trk)
                         
                         if isinstance(model, RansacModel): 
                             _df_mod = model.get_df_model()
-                            if ntrack == 0 : self.df_model = _df_mod
-                            else : self.df_model = pd.concat([self.df_model.astype(_df_mod.dtypes), _df_mod.astype(self.df_model.dtypes)])
+                            df_model_list.append(_df_mod)
                             ninl, noutl = len(model.inliers) - len(model.outliers), len(model.outliers)
                             self.dict_ninliers[key].append(ninl)
                             self.dict_noutliers[key].append(noutl)
@@ -726,6 +725,12 @@ class RansacTracking(Tracking):
                 last_evtID = evt.ID
                 if nl != len(lines)-1: self.nevt_tot += 1                
 
-        if progress_bar : print_progress(nf+1, nfiles, prefix = '\tFile(s) processed :', suffix = 'completed')
+        if progress_bar:
+            print_progress(nf+1, nfiles, prefix = '\tFile(s) processed :', suffix = 'completed')
+
+        if df_track_list:
+            self.df_track = pd.concat(df_track_list, ignore_index=True)
+        if df_model_list:
+            self.df_model = pd.concat(df_model_list, ignore_index=True)
 
         self.format_df_cols()
