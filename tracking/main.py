@@ -62,8 +62,6 @@ kwargs_ransac = dict(residual_threshold=args.residual_threshold,
             min_samples=args.min_samples, 
             max_trials=args.max_trials,  
 ) 
-# Agregar más información de depuración
-logging.info(f"RANSAC parameters: {kwargs_ransac}")
 
 logging.info('\nRansac Tracking...\n')
 rawdata_path = [ Path(p) for p in args.input_data ]

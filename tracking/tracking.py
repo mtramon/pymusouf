@@ -613,124 +613,103 @@ class RansacTracking(Tracking):
         Returns:
             None
         """
-        
         nPM = len(self.tel.pmts)
         minPlan = np.min([pm.ID for pm in self.tel.pmts])
         maxPlan = np.max([pm.ID for pm in self.tel.pmts])
-        last_evtID = 0
-        barwidths = { i :  float(p.matrix.scintillator.width) for i,p  in self.panels.items() }
-
-        #counters
+        barwidths = {i: float(p.matrix.scintillator.width) for i, p in self.panels.items()}
         npanels = len(self.panels)
-        self.dict_nsel = {f'{npanels-1}p':0, f'{npanels}p':0}
-
+        self.dict_nsel = {f'{npanels-1}p': 0, f'{npanels}p': 0}
         nfiles = len(self.data.dataset)
         ntrack = 0
-
         df_track_list = []
         df_model_list = []
 
         for nf, file in enumerate(self.data.dataset):
             print(f"Processing file {nf+1}/{nfiles}: {file}")
             lines = self.data.readfile(file)
-
-            #init : 1st impact on PMT
-            impm = ImpactPM(line=lines[0])
-            #create pmt impact 
-            pmt = self.pmts[impm.pmID]
-            channelmap = pmt.channelmap
-            #create panel impacts
-            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name = self.tel.name, maxPlan=maxPlan)
-            evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
-
-            #Add impacts (impacted panels) to evt
-            for pid, imp in impm.impacts.items() : evt.impacts[pid] = imp
-            
+            evt = self.initialize_event(lines[0], nPM, minPlan, maxPlan)
             last_evtID = evt.ID
-            
-            start_time = time.time()  # Marca el inicio del proceso
+            start_time = time.time()
 
             for nl, line in enumerate(lines[1:]):
-                if nl % 10000 == 0:  # Reduce the frequency of logging messages
-                    percent = (nl + 1) / len(lines) * 100
-                    elapsed_time = time.time() - start_time
-                     # Evita dividir por cero y asegura que hay progreso
-                    if nl > 0:
-                        # Tiempo promedio por línea
-                        avg_time_per_line = elapsed_time / (nl + 1)
-                        # Tiempo restante estimado
-                        remaining_time = avg_time_per_line * (len(lines) - nl - 1)
-                        remaining_str = f"{int(remaining_time // 3600)}h {int((remaining_time % 3600) // 60)}m {int(remaining_time % 60)}s"
-                    else:
-                        remaining_str = "calculating..."
-                    
-                    logging.info(f"Processing line {nl+1}/{len(lines)} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
-                     
+                self.log_progress(nl, len(lines), nf, nfiles, start_time)
                 impm = ImpactPM(line=line)
-                pmt = self.pmts[impm.pmID]
-                channelmap = pmt.channelmap
-                impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
-                
-                if impm.evtID == last_evtID:
-                    for pid, imp in impm.impacts.items() : 
-                        evt.impacts[pid] = imp
-                    if nl == len(lines)-1: 
-                        pass 
-                    else: 
-                        continue
-                
-                #if new evtID, retrieve the last evtID and reconstruct it 
-                #get coordinates 
-                evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
+                impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
 
+                if impm.evtID == last_evtID:
+                    self.update_event(evt, impm)
+                    if nl != len(lines) - 1:
+                        continue
+
+                evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
                 is_cut, _ = self.filter(evt)
                 if is_cut:
-                    evt = self.reinit_evt(old_evt=evt, impact_pm=impm)
+                    evt = self.reinitialize_event(evt, impm)
                     last_evtID = evt.ID
-                    if nl != len(lines)-1: self.nevt_tot += 1
+                    if nl != len(lines) - 1:
+                        self.nevt_tot += 1
                     continue
-                else: 
-                    key = f'{evt.nimpacts}p'
-                    self.dict_nsel [key] += 1    
 
-                try:
-                    evt.get_time_of_flight()
-                except: 
-                    l_imp=list(impm.impacts.values())
-                    raise ValueError(f"{file}\n{evt.ID}\nError 'evt.get_time_of_flight()'\nl_impacts{l_imp}\nl_z={[imp.zpos for imp in l_imp]}")            
+                self.dict_nsel[f'{evt.nimpacts}p'] += 1
+                evt.get_time_of_flight()
+                model = self.create_model(model_type, evt, **kwargs_model)
 
-                model = object.__new__(model_type)#new track model object instance
-                model.__init__(evt)
+                if model.is_valid():
+                    df_track_list.append(model.get_df_track(dict_zloc=self.zloc))
+                    if isinstance(model, RansacModel):
+                        df_model_list.append(model.get_df_model())
+                        self.update_inliers_outliers(model, evt.nimpacts)
 
-                if model.is_track_avail(): 
-                    #print(f"Track available for event {evt.ID}")
-                    model.get(**kwargs_model) 
-                    
-                    if model.is_valid() :
-                        #print(f"Valid track found for event {evt.ID}")
-
-                        _df_trk = model.get_df_track(dict_zloc=self.zloc)
-                        df_track_list.append(_df_trk)
-                        
-                        if isinstance(model, RansacModel): 
-                            _df_mod = model.get_df_model()
-                            df_model_list.append(_df_mod)
-                            ninl, noutl = len(model.inliers) - len(model.outliers), len(model.outliers)
-                            self.dict_ninliers[key].append(ninl)
-                            self.dict_noutliers[key].append(noutl)
-
-                        ntrack+=1
-
-                evt  = self.reinit_evt(old_evt=evt, impact_pm=impm)
+                evt = self.reinitialize_event(evt, impm)
                 last_evtID = evt.ID
-                if nl != len(lines)-1: self.nevt_tot += 1                
+                if nl != len(lines) - 1:
+                    self.nevt_tot += 1
 
         if progress_bar:
-            print_progress(nf+1, nfiles, prefix = '\tFile(s) processed :', suffix = 'completed')
+            print_progress(nf + 1, nfiles, prefix='\tFile(s) processed :', suffix='completed')
 
-        if df_track_list:
-            self.df_track = pd.concat(df_track_list, ignore_index=True)
-        if df_model_list:
-            self.df_model = pd.concat(df_model_list, ignore_index=True)
-
+        self.df_track = pd.concat(df_track_list, ignore_index=True) if df_track_list else pd.DataFrame()
+        self.df_model = pd.concat(df_model_list, ignore_index=True) if df_model_list else pd.DataFrame()
         self.format_df_cols()
+
+    def initialize_event(self, line, nPM, minPlan, maxPlan):
+        impm = ImpactPM(line=line)
+        impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
+        evt = Event(ID=impm.evtID, timestamp=impm.timestamp)
+        for pid, imp in impm.impacts.items():
+            evt.impacts[pid] = imp
+        return evt
+
+    def update_event(self, evt, impm):
+        for pid, imp in impm.impacts.items():
+            evt.impacts[pid] = imp
+
+    def reinitialize_event(self, old_evt, impact_pm):
+        del old_evt
+        new_evtID = impact_pm.evtID
+        evt = Event(ID=new_evtID, timestamp=impact_pm.timestamp)
+        for pid, impan in impact_pm.impacts.items():
+            evt.impacts[pid] = impan
+        return evt
+
+    def log_progress(self, nl, total_lines, nf, nfiles, start_time):
+        if nl % 1000 == 0:
+            percent = (nl + 1) / total_lines * 100
+            elapsed_time = time.time() - start_time
+            avg_time_per_line = elapsed_time / (nl + 1) if nl > 0 else 0
+            remaining_time = avg_time_per_line * (total_lines - nl - 1)
+            remaining_str = f"{int(remaining_time // 3600)}h {int((remaining_time % 3600) // 60)}m {int(remaining_time % 60)}s" if nl > 0 else "calculating..."
+            logging.info(f"Processing line {nl+1}/{total_lines} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
+
+    def create_model(self, model_type, evt, **kwargs_model):
+        model = object.__new__(model_type)
+        model.__init__(evt)
+        if model.is_track_avail():
+            model.get(**kwargs_model)
+        return model
+
+    def update_inliers_outliers(self, model, nimpacts):
+        key = f'{nimpacts}p'
+        ninl, noutl = len(model.inliers) - len(model.outliers), len(model.outliers)
+        self.dict_ninliers[key].append(ninl)
+        self.dict_noutliers[key].append(noutl)
