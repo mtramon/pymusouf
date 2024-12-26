@@ -7,16 +7,19 @@ from typing import List, Dict, Union
 from enum import Enum, auto
 import numpy as np
 import os
-from pathlib import Path
 import inspect
 filename = inspect.getframeinfo(inspect.currentframe()).filename
 script_path = os.path.dirname(os.path.abspath(filename))
-from dataclasses import dataclass, field
 from skimage.measure import ransac, LineModelND
-from sklearn.linear_model import RANSACRegressor,LinearRegression
+from sklearn.linear_model import LinearRegression
 import pandas as pd
 from itertools import combinations
 from math import floor, log10
+import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 #package module(s)
 from survey.data import RawData
@@ -69,8 +72,8 @@ class Impact:
         if "\t" in self.line : l= self.line.split("\t")
         try:
             ts_s, self.evtID, ts_ns  = float(l[0]), int(l[1]), float(l[2])
-        except:
-            raise ValueError(f"{self.line}\n{l}")
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Error parsing line: {self.line}\n{l}\nException: {e}")
         if self.panelID == None: self.panelID = int(l[5])
         self.nhits = int(l[8])
         self.timestamp = Timestamp(ts_s, ts_ns)
@@ -144,7 +147,7 @@ class ImpactPM:
             elif nPM == 3 or nPM == 4:
                 panID = self.pmID
             else:
-                return "Unknown PMT configuration"
+                raise ValueError("Unknown PMT configuration")
 
             if panID not in l_panelID:
                 l_panelID.append(panID)
@@ -502,28 +505,28 @@ class Tracking:
         Here you can add filters to event before reconstructing the trajectory
         '''
         
-        iscut= False             
+        is_cut = False             
         tag = ""
         
         npanels = len(self.panels)
 
         if len(evt.xyz) ==0 : 
-            iscut= True
+            is_cut = True
             tag = "xyz"
-            return iscut, tag
+            return is_cut, tag
        
         #Capture selected events to be reconstructed
         if  evt.nimpacts  < npanels-1 : 
-            iscut = True 
+            is_cut = True 
             tag = "panels"
-            return iscut, tag   
+            return is_cut, tag   
         
         #check hit multiplicity on each impact
         max_multiplicity = max([len(i.hits) for _,i in evt.impacts.items()])
         if max_multiplicity > 10: 
-            iscut=True
+            is_cut=True
             tag = "multiplicity"
-            return iscut, tag   
+            return is_cut, tag   
           
         nhits = sum([len(i.hits) for _,i in evt.impacts.items()])
         ####is evt gold ?
@@ -531,7 +534,7 @@ class Tracking:
             evt.gold = 1 
             evt.dict_out['gold'] = evt.gold
             self.ngold += 1
-        return iscut, tag
+        return is_cut, tag
     
 
 
@@ -583,6 +586,7 @@ class RansacTracking(Tracking):
     def format_df_cols(self):
 
         col_trk = self.df_track.columns 
+        dtype = int
         for col in col_trk:
             self.df_track[col] = np.ndarray.astype(self.df_track[col].values, dtype=int)
         
@@ -591,13 +595,23 @@ class RansacTracking(Tracking):
             col_mod = self.df_model.columns
 
             for col in  col_mod :
-                dtype=int
-                if col == 'ADC_X' or col =='ADC_Y':    dtype=float
+                if col == 'ADC_X' or col =='ADC_Y':
+                    dtype = float
+                else:
+                    dtype = int
                 self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
+    def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=True, **kwargs_model)-> None:
+        """
+        Process tracking data files event-by-event.
 
-   
+        Args:
+            model_type (Union[RansacModel, OtherModel]): The type of model to use for tracking.
+            progress_bar (bool, optional): Whether to display a progress bar. Defaults to False.
+            **kwargs_model: Additional keyword arguments for the model.
 
-    def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=False, **kwargs_model)-> None :
+        Returns:
+            None
+        """
         '''
         Process tracking data files event-by-event
         '''
@@ -616,7 +630,7 @@ class RansacTracking(Tracking):
         ntrack = 0
 
         for nf, file in enumerate(self.data.dataset):
-            
+            print(f"Processing file {nf+1}/{nfiles}: {file}")
             lines = self.data.readfile(file)
 
             #init : 1st impact on PMT
@@ -625,7 +639,6 @@ class RansacTracking(Tracking):
             pmt = self.pmts[impm.pmID]
             channelmap = pmt.channelmap
             #create panel impacts
-            # impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
             impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name = self.tel.name, maxPlan=maxPlan)
             evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
 
@@ -634,13 +647,27 @@ class RansacTracking(Tracking):
             
             last_evtID = evt.ID
             
-            for nl, line in enumerate(lines[1:]) :
-                # print(f'--->EVT{last_evtID}')
-                
+            start_time = time.time()  # Marca el inicio del proceso
+
+            for nl, line in enumerate(lines[1:]):
+                if nl % 10000 == 0:  # Reduce the frequency of logging messages
+                    percent = (nl + 1) / len(lines) * 100
+                    elapsed_time = time.time() - start_time
+                     # Evita dividir por cero y asegura que hay progreso
+                    if nl > 0:
+                        # Tiempo promedio por línea
+                        avg_time_per_line = elapsed_time / (nl + 1)
+                        # Tiempo restante estimado
+                        remaining_time = avg_time_per_line * (len(lines) - nl - 1)
+                        remaining_str = f"{int(remaining_time // 3600)}h {int((remaining_time % 3600) // 60)}m {int(remaining_time % 60)}s"
+                    else:
+                        remaining_str = "calculating..."
+                    
+                    logging.debug(f"Processing line {nl+1}/{len(lines)} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
+                     
                 impm = ImpactPM(line=line)
                 pmt = self.pmts[impm.pmID]
                 channelmap = pmt.channelmap
-                # impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
                 impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
                 
                 if impm.evtID == last_evtID:
@@ -650,13 +677,13 @@ class RansacTracking(Tracking):
                         pass 
                     else: 
                         continue
+                
                 #if new evtID, retrieve the last evtID and reconstruct it 
                 #get coordinates 
-                # evt.get_xyz(in_mm=True, width=barwidths, zpos=self.zpos)
                 evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
 
-                iscut, _ = self.filter(evt)
-                if iscut:
+                is_cut, _ = self.filter(evt)
+                if is_cut:
                     evt = self.reinit_evt(old_evt=evt, impact_pm=impm)
                     last_evtID = evt.ID
                     if nl != len(lines)-1: self.nevt_tot += 1
@@ -671,22 +698,20 @@ class RansacTracking(Tracking):
                     l_imp=list(impm.impacts.values())
                     raise ValueError(f"{file}\n{evt.ID}\nError 'evt.get_time_of_flight()'\nl_impacts{l_imp}\nl_z={[imp.zpos for imp in l_imp]}")            
 
-            
                 model = object.__new__(model_type)#new track model object instance
                 model.__init__(evt)
 
                 if model.is_track_avail(): 
-
+                    #print(f"Track available for event {evt.ID}")
                     model.get(**kwargs_model) 
                     
                     if model.is_valid() :
-
+                        #print(f"Valid track found for event {evt.ID}")
 
                         _df_trk = model.get_df_track(dict_zloc=self.zloc)
                         if ntrack == 0 :   self.df_track = _df_trk
                         else : self.df_track = pd.concat([self.df_track.astype(_df_trk.dtypes), _df_trk.astype(self.df_track.dtypes)])
                         
-
                         if isinstance(model, RansacModel): 
                             _df_mod = model.get_df_model()
                             if ntrack == 0 : self.df_model = _df_mod
@@ -697,164 +722,10 @@ class RansacTracking(Tracking):
 
                         ntrack+=1
 
-
                 evt  = self.reinit_evt(old_evt=evt, impact_pm=impm)
                 last_evtID = evt.ID
                 if nl != len(lines)-1: self.nevt_tot += 1                
-                
 
         if progress_bar : print_progress(nf+1, nfiles, prefix = '\tFile(s) processed :', suffix = 'completed')
 
         self.format_df_cols()
-
-
-
-   
-   
-    '''
-
-    def process(self, progress_bar:bool=False, **kwargs)-> None :
-        """
-        RANSAC tracking of data files event-by-event
-        """
-        #ransac parameters : 
-        lparkeys = ['residual_threshold', 'min_samples', 'max_trials']
-
-        nPM = len(self.tel.pmts)
-        minPlan = np.min([pm.ID for pm in self.tel.pmts])
-        last_evtID = 0
-        barwidths = { i :  float(p.matrix.scintillator.width) for i,p  in self.panels.items() }
-        headers= list(self.df_track.keys())
-        npanels = len(self.panels)
-        self.nsel = {f'{npanels-1}p':0, f'{npanels}p':0}
-        self.ninl = {f'{npanels-1}p':[], f'{npanels}p':[]}
-        self.noutl = {f'{npanels-1}p':[], f'{npanels}p':[]}
-        self.npts = {f'{npanels-1}p':[], f'{npanels}p':[]}
-        
-        n, nfiles = 0, len(self.data.dataset)
-
-        for _, file in enumerate(self.data.dataset):
-            
-            lines= self.data.readfile(file)
-            nlines = len(lines)
-            #init : 1st impact on PMT
-            impm = ImpactPM(line=lines[0])
-            #create pmt impact 
-            pmt = self.pmts[impm.pmID]
-            channelmap = pmt.channelmap
-            #create panel impacts
-            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
-            evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
-            #Add impacts (=traversed scint. panels) to evt
-            for pid, imp in impm.impacts.items() : evt.impacts[pid] = imp
-            # evt.timestamp.s, evt.timestamp.ns= impm.timestamp.s, impm.timestamp.ns
-            
-            last_evtID = evt.ID
-            out_matrix = np.zeros(shape=(nlines, len(headers)))
-            
-            for i, l in enumerate(lines[1:]) :
-                # print(f'--->EVT{last_evtID}')
-                impm = ImpactPM(line=l)
-                pmt = self.pmts[impm.pmID]
-                channelmap = pmt.channelmap
-                impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
-                if impm.evtID == last_evtID:
-                    for pid, imp in impm.impacts.items() : evt.impacts[pid] = imp
-                    if i == len(lines)-1: pass #last line of file
-                    else: continue
-                #if new evtID, retrieve the last evtID and reconstruct it 
-                #get coordinates 
-                evt.get_xyz(in_mm=True, width=barwidths, zpos=self.zpos)
-
-                iscut, tag = self.filter(evt)
-                if iscut:
-                    evt = self.reinit_evt(old_evt=evt, impact_pm=impm)
-                    last_evtID = evt.ID
-                    if i != len(lines)-1: self.nevt_tot += 1
-                    continue
-                else: 
-                    # for _,imp in evt.impacts.items():
-                    #     s ="{},{},{}".format(evt.ID,imp.panelID, ','.join(str(h.adc) for h in imp.hits))
-                    #     ####Get counts of traversed panels
-                    #     self.sel_signal[f'{evt.nimpacts}p'].append(s)
-                    self.nsel [f'{evt.nimpacts}p'] += 1    
-                try:
-                    evt.get_time_of_flight()
-                except: 
-                    l_imp=list(impm.impacts.values())
-                    raise ValueError(f"{file}\n{evt.ID}\nError 'evt.get_time_of_flight()'\nl_impacts{l_imp}\nl_z={[imp.zpos for imp in l_imp]}")            
-
-
-                model = RansacModel(evt)
-                
-                if model.is_track_avail(): 
-
-                    kwargs_model = {par : kwargs[par] for par in lparkeys}
-                    model.get(**kwargs_model) 
-                    
-                    if model.is_valid() :
-                        
-        
-                        model.get_df_track( self.zpos)
-
-                        
-                        xyz_inter = Intersection(model.model_robust, self.zpan ).xyz
-                        xyz_track = np.around(xyz_inter,1)
-                        
-                        if kwargs['is_fit_intersect'] : 
-                            xfin, yfin, _ = xyz_track.T
-                        else : 
-                            xyz_inliers = evt.xyz[model.inliers]
-                            xyz_inliers_sort = xyz_inliers[xyz_inliers[:,-1].argsort()]
-                            z_traversed = set(xyz_inliers_sort[:,2])
-                            ix_near = np.array([np.argmin(np.array([ np.linalg.norm(xyz - xyz_track[xyz_track[:,2]==z]) for xyz in xyz_inliers_sort ]) ) if z in z_traversed else None  for z in self.zpan ])
-                            close_xyz = np.array([ xyz_inliers_sort[ix] if ix is not None else np.zeros(3) for ix in ix_near ] ) 
-                            xfin, yfin, _ = close_xyz.T
-                            xfin[xfin==0.], yfin[yfin==0.] = xyz_track[np.where(xfin==0)[0], 0], xyz_track[np.where(yfin==0)[0], 1]
-
-
-                        line = np.concatenate(([evt.ID, evt.gold, evt.timestamp.s, evt.timestamp.ns, evt.tof, evt.npts, evt.nimpacts, model.quadsumres], xfin, yfin, [nin, nout]), axis=0)
-                        
-
-                        out_matrix[i, :] = line
-                        self.fill_df_inlier(model)
-                        self.ntrack[f'{evt.nimpacts}p'] += 1     
-                        
-                evt = self.reinit_evt(old_evt = evt, impact_pm = impm)
-                last_evtID = evt.ID
-                if i != len(lines)-1: self.nevt_tot += 1                
-            
-            out_matrix =  out_matrix[~np.all( (out_matrix == 0.), axis=1)]
-            #self.df_track  = self.df_track.append(pd.DataFrame(out_matrix, columns=headers))
-            df_file = pd.DataFrame(out_matrix, columns=self.df_track.columns)
-            self.df_track = pd.concat([self.df_track.astype(df_file.dtypes), df_file.astype(self.df_track.dtypes)]) #fix future pandas warning on concatenation
-            if progress_bar : print_progress(n+1, nfiles, prefix = '\tFile(s) processed :', suffix = 'completed')
-            n+=1
-         ####format columns 
-        self.format_columns()
-        #self.df_inlier.set_index(['evtID', 'timestamp_s', 'timestamp_ns'], inplace=True)
-
-
-    def fill_df_inlier(self, model:RansacModel):
-        """Fill RANSAC inlier dataframe"""
-        for i in range(len(model.inliers)):
-            xyz, adc = model.xyz[i,:], model.adc[i,:]
-            is_inl = model.inliers[i]
-            evt = model.event
-            timestamp_s, timestamp_ns = model.impacts[adc[2]].timestamp.s, evt.impacts[adc[2]].timestamp.ns
-            df_tmp = pd.DataFrame(np.array([ [int(evt.ID), int(timestamp_s), int(timestamp_ns), int(is_inl), int(evt.gold), xyz[0], xyz[1], xyz[2], adc[0], adc[1]] ]), columns=self.col_inlier)
-            self.df_inlier = pd.concat([self.df_inlier.astype(df_tmp.dtypes), df_tmp.astype(self.df_inlier.dtypes)]) #fix future pandas warning on contatenation
-    
-    
-
-    '''
-
-
-
-
-
-
-
-
-
-

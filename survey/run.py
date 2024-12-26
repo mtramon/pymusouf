@@ -43,7 +43,7 @@ class Run:
                 for p in dpraw : 
                     p = Path(p)
                     if p.exists(): path.append(p)
-                    else : print(f"Raw path {p} was not found.")
+                    # else : print(f"Raw path {p} was not found.")
                 
                 #if len(path) == 1:  path = path[0]
         
