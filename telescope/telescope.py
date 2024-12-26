@@ -410,32 +410,32 @@ tel_COP[conf_name] = Config_3p1_32x32
 tel_COP.panels = Config_3p1_32x32.panels
 tel_COP.pmts = Config_3p1_32x32.pmts
 
-##### MONT-TERRI 
-tel_name = 'MT'
-tel_MT = Telescope(name=tel_name)
+##### MONT-TERRI (mapping not available)
+# tel_name = 'MT'
+# tel_MT = Telescope(name=tel_name)
 
-tel_MT.utm = np.array([361456, 5248745, 564.26]) 
-tel_MT.altitude = tel_MT.utm[-1]
-tel_MT.azimuth = 160.0
-tel_MT.zenith = 50.3
-tel_MT.elevation = round(90.0-tel_MT.zenith,1)
-tel_MT.site = "Mont-Terri"
-tel_MT.color = "grey"
+# tel_MT.utm = np.array([361456, 5248745, 564.26]) 
+# tel_MT.altitude = tel_MT.utm[-1]
+# tel_MT.azimuth = 160.0
+# tel_MT.zenith = 50.3
+# tel_MT.elevation = round(90.0-tel_MT.zenith,1)
+# tel_MT.site = "Mont-Terri"
+# tel_MT.color = "grey"
 
-chmap16 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv1_1, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap16)
-front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap16)
-middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
-middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16)
-rear_panel = Panel(matrix = matrixv1_1, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap16)
-rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap16) 
-conf_name = '3p1'
-Config_3p1_16x16 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, rear_panel],
-                               pmts=[front_pmt, middle1_pmt, rear_pmt])
-tel_MT[conf_name] = Config_3p1_16x16
-tel_MT.panels = Config_3p1_16x16.panels
-tel_MT.pmts = Config_3p1_16x16.pmts
+# chmap16 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
+# front_panel = Panel(matrix = matrixv1_1, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap16)
+# front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap16)
+# middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
+# middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16)
+# rear_panel = Panel(matrix = matrixv1_1, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap16)
+# rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap16) 
+# conf_name = '3p1'
+# Config_3p1_16x16 = PanelConfig(name = conf_name, 
+#                                panels=[front_panel, middle1_panel, rear_panel],
+#                                pmts=[front_pmt, middle1_pmt, rear_pmt])
+# tel_MT[conf_name] = Config_3p1_16x16
+# tel_MT.panels = Config_3p1_16x16.panels
+# tel_MT.pmts = Config_3p1_16x16.pmts
 
 #####OM: OrangeMecanique GW Fente du Nord 2017-2019 3 matrices = 1 * v1.1 + 2 * v2.0
 tel_name = 'OM'
@@ -609,7 +609,8 @@ tel_SXF.panels = Config_4p_16x16.panels
 tel_SXF.pmts = Config_4p_16x16.pmts
 
 
-DICT_TEL = { 'SNJ': tel_SNJ, 'BR': tel_BR, 'OM': tel_OM, 'SB': tel_SB, 'COP' : tel_COP, 'SBR': tel_SBR, 'SXF': tel_SXF, 'MT': tel_MT }
+# DICT_TEL = { 'SNJ': tel_SNJ, 'BR': tel_BR, 'OM': tel_OM, 'SB': tel_SB, 'COP' : tel_COP, 'SBR': tel_SBR, 'SXF': tel_SXF, 'MT': tel_MT }}
+DICT_TEL = { 'SNJ': tel_SNJ, 'BR': tel_BR, 'OM': tel_OM, 'SB': tel_SB, 'COP' : tel_COP, 'SBR': tel_SBR, 'SXF': tel_SXF}
 
 
 def str2telescope(v):

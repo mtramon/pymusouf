@@ -47,6 +47,12 @@ class HitMap:
     
         
     def fill_dxdy(self, dict_filter:dict=None):
+        """
+        Fills the DXDY hit maps for each telescope configuration.
+
+        Args:
+            dict_filter (dict, optional): A dictionary containing filters for event IDs. Defaults to None.
+        """
 
         self.h_DXDY  = { name : None for name in self.sconfig}
         self.df_DXDY = { name : None for name in self.sconfig}
@@ -56,7 +62,7 @@ class HitMap:
             key = pan.position.loc
             xpos, ypos = f"X_{key}", f"Y_{key}"
             ((xmin, xmax), (ymin, ymax)) = self.rangeXY[key]
-            sel =  ( (xmin< self.df[xpos]) & (self.df[xpos]<xmax) &  (ymin< self.df[ypos]) & (self.df[ypos]<ymax) )
+            sel =  ( (xmin < self.df[xpos]) & (self.df[xpos] < xmax) &  (ymin < self.df[ypos]) & (self.df[ypos] < ymax) )
             self.XY[key] = [self.df[sel][xpos].values, self.df[sel][ypos].values]
 
         for name, conf in self.tel.configurations.items():
@@ -67,8 +73,8 @@ class HitMap:
             ((xminr, xmaxr), (yminr, ymaxr)) = self.rangeXY[rear]
             xposf, yposf = f"X_{front}", f"Y_{front}"
             xposr, yposr = f"X_{rear}", f"Y_{rear}"
-            sfront =  ( (xminf< self.df[xposf]) & (self.df[xposf]<xmaxf) &  (yminf< self.df[yposf]) & (self.df[yposf]<ymaxf) )
-            srear = ( (xminr < self.df[xposr]) & (self.df[xposr]<xmaxr) &  (yminr< self.df[yposr]) & (self.df[yposr]<ymaxr) )
+            sfront =  ( (xminf < self.df[xposf]) & (self.df[xposf] < xmaxf) &  (yminf < self.df[yposf]) & (self.df[yposf] < ymaxf) )
+            srear = ( (xminr < self.df[xposr]) & (self.df[xposr] < xmaxr) &  (yminr < self.df[yposr]) & (self.df[yposr] < ymaxr) )
             sel = (sfront & srear)
 
             ###apply filter on evt ids
@@ -76,7 +82,6 @@ class HitMap:
             if dict_filter: 
                 filter = dict_filter[name]
                 idx  = self.df[sel].loc[filter].index
-                #idx  = df[df.index.isin(filter)][sel].index
             else : 
                 idx  = self.df[sel].index
 
@@ -93,22 +98,25 @@ class HitMap:
 
     def plot_xy_map(self, invert_yaxis:bool=True, transpose:bool=False, invert_xaxis:bool=True):
         """Plot hit map for reconstructed primaries and all primaries"""
-        fig, fax = plt.subplots(figsize=(8, 12), nrows=len(self.panels), ncols=1, sharex=True)
+        fig, fax = plt.subplots(figsize=(8, 14), nrows=len(self.panels), ncols=1, sharex=True)
         for i, p in enumerate(self.panels):  
             ax = fax[i]
-            ax.set_aspect('equal')#, adjustable='box')
+            ax.set_aspect('equal')
             key = p.position.loc
             X, Y = self.XY[key]
             ax.set_title(f"{p.position.loc}")
             if i == len(self.panels)-1: ax.set_title("Rear")
             ax.grid(False)
-            counts, xedges, yedges, im1 = ax.hist2d( X, Y,cmap='viridis', bins=self.binsXY[key], range=self.rangeXY[key] ) #im1 = ax.imshow(hXY[i])
-            if transpose: 
-                ax.hist2d(Y, X, cmap='viridis', bins=self.binsXY[key], range=self.rangeXY[key] ) #im1 = ax.imshow(hXY[i])
+            if transpose:
+                _, _, _, im1 = ax.hist2d(Y, X, cmap='viridis', bins=self.binsXY[key], range=self.rangeXY[key])
+            else:
+                _, _, _, im1 = ax.hist2d(X, Y, cmap='viridis', bins=self.binsXY[key], range=self.rangeXY[key])
             if invert_yaxis: ax.invert_yaxis()
             if invert_xaxis: ax.invert_xaxis()
             if i == len(self.panels)-1 : ax.set_xlabel('Y')
             ax.set_ylabel('X')
+            ax.set_xticks(np.linspace(self.rangeXY[key][0][0], self.rangeXY[key][0][1], 5))
+            ax.set_yticks(np.linspace(self.rangeXY[key][1][0], self.rangeXY[key][1][1], 5))
             divider1 = make_axes_locatable(ax)
             cax1 = divider1.append_axes("right", size="5%", pad=0.05)
             cbar=fig.colorbar(im1, cax=cax1, format='%.0e')
@@ -126,13 +134,14 @@ class HitMap:
             flipud (bool, optional): _description_. Defaults to False.
         """
         nconfigs = len(self.sconfig)
-        fig, fax = plt.subplots(figsize=(8, 12), nrows=nconfigs, ncols=1, sharex=True)
+        fig, fax = plt.subplots(figsize=(8, 14), nrows=nconfigs, ncols=1, sharex=True)
         for i, name in enumerate(self.sconfig):
             if nconfigs > 1 : ax = fax[i]
             else: ax=fax
-            ax.set_aspect('equal')#, adjustable='box')
-            ax.set_ylabel('$\\Delta$X [mm]')#, fontsize=16)
-            ax.set_xlabel('$\\Delta$Y [mm]')#, fontsize=16)
+            ax.set_aspect('equal')
+            ax.set_ylabel('$\\Delta$X [mm]')
+            ax.set_xlabel('$\\Delta$Y [mm]')
+            if i == len(self.sconfig)-1 : ax.set_xlabel('$\\Delta$Y [mm]')
             DX_min, DX_max = self.rangeDXDY[name][0]
             DY_min, DY_max = self.rangeDXDY[name][1]
             h = self.hDXDY[name]
@@ -142,9 +151,10 @@ class HitMap:
             h[h==0] = np.nan
             im = ax.imshow(h, cmap='viridis', norm=LogNorm(vmin=1, vmax=np.max(h[~np.isnan(h)])), extent=[DX_min, DX_max, DY_min, DY_max] )
             ax.grid(False)
-            #hist, xedges, yedges, im1 = ax1.hist2d( DY[c], DX[c], edgecolor='black', linewidth=0., bins=self.binsDXDY[c], range=self.rangeDXDY[c], weights=None, cmap='viridis', norm=LogNorm(vmin=1, vmax=np.max(self.hDXDY[c]) ) ) #    
             if invert_xaxis:  ax.invert_xaxis()
             if invert_yaxis:  ax.invert_yaxis()
+            ax.set_xticks(np.linspace(DY_min, DY_max, 6))
+            ax.set_yticks(np.linspace(DX_min, DX_max, 6))
             divider1 = make_axes_locatable(ax)
             cax1 = divider1.append_axes("right", size="5%", pad=0.05)
             cbar = fig.colorbar(im, cax=cax1, extend='max')

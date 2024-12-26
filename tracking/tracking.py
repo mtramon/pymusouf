@@ -96,20 +96,16 @@ class ImpactPM:
     nhits: int = field(init=False)
     impacts : Dict[int, Impact] = field(default_factory=dict)
     
-
     def __post_init__(self):
-       
         self._channel_no = []
         self._adc = []
         self.readline()
-        
 
     def readline(self):
-
         l = self.line.split()
-        if "\t" in self.line : l= self.line.split("\t")
+        if "\t" in self.line: l = self.line.split("\t")
         try:
-            ts_s, self.evtID, ts_ns  = float(l[0]), int(l[1]), float(l[2])
+            ts_s, self.evtID, ts_ns = float(l[0]), int(l[1]), float(l[2])
         except:
             raise ValueError(f"{self.line}\n{l}")
         self.pmID = int(l[5])
@@ -117,17 +113,15 @@ class ImpactPM:
         self.timestamp = Timestamp(s=ts_s, ns=ts_ns)
         self._channel_no = [int(l[9 + 2 * i]) for i in range(self.nhits)]  
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
-       
 
-    def fill_panel_impacts(self,channelmap:ChannelMap, nPM:int, zpos:dict, minPlan:int=6, scint_eff:float=None, langau:dict=None, tel_name:str = None, maxPlan:int=7):
-       
-        chmap  = channelmap.dict_ch_to_bar
+    def fill_panel_impacts(self, channelmap: ChannelMap, nPM: int, zpos: dict, minPlan: int = 6, scint_eff: float = None, langau: dict = None, tel_name: str = None, maxPlan: int = 7):
+        chmap = channelmap.dict_ch_to_bar
         ch_keys = list(chmap.keys())
         l_panelID = []
         for adc, ch in zip(self._adc, self._channel_no):
-            if ch not in ch_keys: 
+            if ch not in ch_keys:
                 continue
-            
+
             if nPM == 2:
                 if tel_name == 'SBR':
                     # SBR configuration
@@ -137,7 +131,6 @@ class ImpactPM:
                         panID = 2 * (self.pmID - minPlan) + 1
                     else:
                         raise ValueError(f"Issue with channel {ch}")
-                    
                 elif tel_name == 'SXF':
                     # SXF configuration
                     if ch % 8 <= 3:
@@ -148,36 +141,27 @@ class ImpactPM:
                         raise ValueError(f"Issue with channel {ch}")
                 else:
                     raise ValueError(f"Unknown tel_name: {tel_name}")
-            
-            # if nPM == 2:
-            #     ####SBR & SXF config
-            #     if ch%8 <= 3 : 
-            #         panID = 2*(self.pmID - minPlan) 
-            #     elif ch%8 >= 4 :
-            #         panID = 2*(self.pmID - minPlan)+1  
-            #     else : 
-            #         raise f"Issue with channel {ch}"
-                
             elif nPM == 3 or nPM == 4:
                 panID = self.pmID
-            else: 
-                return "Unknown PMT configuration"    
-            
-            if panID not in l_panelID:     
+            else:
+                return "Unknown PMT configuration"
+
+            if panID not in l_panelID:
                 l_panelID.append(panID)
-                self.impacts[panID] =  Impact(line=self.line, panelID=panID, zpos=zpos[int(panID)]) 
+                self.impacts[panID] = Impact(line=self.line, panelID=panID, zpos=zpos[int(panID)])
             hit = Hit(channel_no=ch, bar_no=chmap[ch], adc=adc, panelID=panID)
-            if scint_eff is None: 
+            if scint_eff is None:
                 self.impacts[panID].hits.append(hit)
                 continue
             else:
                 p = np.random.uniform(low=0.0, high=1., size=None)
-                if p <= scint_eff : 
+                if p <= scint_eff:
                     self.impacts[panID].hits.append(hit)
                     continue
-                else: pass
-            
-    
+
+            # Detailed debugging information
+            print(f"Processed hit: channel={ch}, bar={chmap[ch]}, adc={adc}, panelID={panID}, tel_name={tel_name}, nPM={nPM}, minPlan={minPlan}, maxPlan={maxPlan}")
+
 @dataclass
 class Event:
 
@@ -240,9 +224,7 @@ class Event:
             
             #scint. center as pt coords
             arr_xyz_mm[i] =  np.array([x_bar-1/2, y_bar-1/2, 1]) * np.append( np.ones(2)*scint_width,  z_coord  )
-            #arr_xyz_mm[i] = np.multiply(arr_xyz_mm[i], np.array([-1,-1,-1]))
-            #arr_xyz_mm[i] = np.add(arr_xyz_mm[i], np.array([0,0,-900]))
-        
+
         return arr_xyz_mm
         
 
@@ -337,13 +319,6 @@ class TrackModel:
         self.residuals = self.model_robust.residuals(xyz)
         self.quadsumres = np.around(np.sum(np.power(self.residuals,2)),3)
         self.dict_out['quadsumres'] = np.around(self.quadsumres,1)
-        #self.expected_xyz = Intersection(self.model_robust, xyz[:, -1] ).points[0][:,:-1]
-        #self.obs_exp = self.xyz[:,:-1] - self.expected_xyz
-        #self.chi2 = np.sum(np.divide(np.power(self.obs_exp,2),self.expected_xyz))/sigma**2
-        # self.ndof = len(self.residuals) - (len(self.model_robust.params[1])-1)
-        #rss = np.sum(np.power(self.residuals, 2))
-        #self.rchi2 = self.chi2/self.ndof    
-        # self.gof = 0.#np.around(self.rchi2, 3)
 
 
 class RansacModel(TrackModel):
@@ -370,10 +345,7 @@ class RansacModel(TrackModel):
         #    N = int( np.log(1-p_success)/ np.log(1-p_inlier**ms) ) 
         self.default_ransac_param = {'residual_threshold': t, "min_samples": ms, "max_trials": N,}# "stop_probability":0.99} 
     
-
-
     def get(self, **kwargs) -> None:
-        
         for key,par in self.default_ransac_param.items():    
             if key not in list(kwargs.keys()): kwargs[key] = par
                
@@ -385,16 +357,15 @@ class RansacModel(TrackModel):
                 LineModelND,
                 **kwargs
             )
-        except:
-            print(f"No model found for evt {self.evt.ID}")
-
+        except Exception as e:
+            print(f"No model found for evt {self.evt.ID}: {e}")
+            print(f"Event data: {self.evt.xyz}")
+            print(f"RANSAC parameters: {kwargs}")
 
     def is_valid(self)->bool:        
-        
         model, inliers = self.model_robust, np.asarray(self.inliers)
         
         if model is None or inliers.size ==0:
-
             return False
 
         if inliers[inliers==False].size == inliers.size:
@@ -876,15 +847,14 @@ class RansacTracking(Tracking):
     
     
 
-    '''    
+    '''
 
 
 
-    
-    
 
-  
-    
-    
-  
- 
+
+
+
+
+
+

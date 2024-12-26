@@ -62,19 +62,26 @@ kwargs_ransac = dict(residual_threshold=args.residual_threshold,
             min_samples=args.min_samples, 
             max_trials=args.max_trials,  
 ) 
-            #is_fit_intersect=args.fit_intersect)
+# Agregar más información de depuración
+logging.info(f"RANSAC parameters: {kwargs_ransac}")
 
 logging.info('\nRansac Tracking...\n')
 rawdata_path = [ Path(p) for p in args.input_data ]
 
+# Print the number of files to be read
+logging.info(f"Number of files to be read: {len(rawdata_path)}")
+
 runs = []
-# if len(rawdata_path) == 0 : 
-     # runs = survey.run_tomo
-#else : 
 for praw in rawdata_path: 
-    raw = RawData(path=praw)
-    run = Run(name = praw, telescope = args.telescope, rawdata = [raw])
-    runs.append(run)
+    try:
+        raw = RawData(path=praw)
+        run = Run(name = praw, telescope = args.telescope, rawdata = [raw])
+        runs.append(run)
+    except Exception as e:
+        logging.error(f"Failed to initialize RawData for path {praw}: {e}")
+        runs.append(run)
+    except Exception as e:
+        logging.error(f"Failed to initialize Run for {praw}: {e}")
 
 n, nruns = 0, len(runs)
 for run in runs:
