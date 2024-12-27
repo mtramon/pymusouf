@@ -83,17 +83,11 @@ if __name__ == "__main__":
     parser.add_argument('--min_samples', '-ms', default=2, help='RANSAC size of the initial sample',type=int)
     parser.add_argument('--max_trials', '-mt', default=100, help='RANSAC number of iterations',type=int)
     parser.add_argument('--fit_intersect', '-intersect', default=False, help='if true record line model intersection points on panel; else record closest XY inlier points to model',type=str2bool)
-    parser.add_argument('--info', '-info', default=None, help='Additional info',type=str)
+    parser.add_argument('--info', '-info', default=False, help='Additional info',type=str)
     parser.add_argument('--progress_bar', '-bar', default=False, help='Display progress bar',type=str2bool)
     parser.add_argument('--num_workers', '-nw', default=os.cpu_count(), help='Number of workers for parallel processing', type=int)
     parser.add_argument('--profile', '-p', default=False, help='Enable profiling', type=str2bool)
     args=parser.parse_args()
-
-    # Start profiling
-    pr = None
-    if args.profile:
-        pr = cProfile.Profile()
-        pr.enable()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -103,15 +97,28 @@ if __name__ == "__main__":
     reco_dir.mkdir(parents=True, exist_ok=True)
 
     strdate = time.strftime("%d%m%Y_%H%M")
-    flog =str(out_dir/f'{strdate}.log')
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s [%(levelname)s] %(message)s",
-                        filemode='w',
-                        #filename=flog,)
-                        stream=sys.stdout,) #either set 'filename' to save info in log file or 'stream' to print out on console
+    flog = str(out_dir / f'{strdate}.log')
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(flog, mode='w'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
     logging.info(sys.argv)
     logging.info(f"Start -- {t0}")
-    if args.info : logging.info(args.info) #additional info
+    if args.info:
+        logging.info(args.info)  # additional info 
+
+    # Start profiling
+    pr = None
+    if args.profile:
+        pr = cProfile.Profile()
+        pr.enable()
 
     kwargs_ransac = dict(residual_threshold=args.residual_threshold, 
                 min_samples=args.min_samples, 
@@ -138,29 +145,46 @@ if __name__ == "__main__":
         
         for n, future in enumerate(as_completed(futures)):
             ftrack, fmodel = future.result()
-            elapsed_time = time.time() - start_time
-            remaining_time = (elapsed_time / (n + 1)) * (total_files - (n + 1))
-            logging.info(f"Progress: {((n + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
+            if (n + 1) % max(1, total_files // 100) == 0:
+                elapsed_time = time.time() - start_time
+                remaining_time = (elapsed_time / (n + 1)) * (total_files - (n + 1))
+                logging.info(f"Progress: {((n + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
 
     # Merge all df_inlier*.csv.gz files into one df_inlier.csv.gz and delete original files
     df_inlier_files = list(out_dir.glob('df_inlier_*.csv.gz'))
     if df_inlier_files:
-        df_inlier_list = [pd.read_csv(f, compression='gzip', sep='\t') for f in df_inlier_files]
-        df_inlier = pd.concat(df_inlier_list, ignore_index=True)
-        df_inlier.to_csv(out_dir / 'df_inlier.csv.gz', compression='gzip', index=False, sep='\t')
-        logging.info(f"Merged {len(df_inlier_files)} df_inlier files into df_inlier.csv.gz")
+        df_inlier_list = []
         for f in df_inlier_files:
-            f.unlink()  # Delete the original file
+            try:
+                df = pd.read_csv(f, compression='gzip', sep='\t')
+                if not df.empty:
+                    df_inlier_list.append(df)
+            except pd.errors.EmptyDataError:
+                logging.warning(f"Empty file skipped: {f}")
+        if df_inlier_list:
+            df_inlier = pd.concat(df_inlier_list, ignore_index=True)
+            df_inlier.to_csv(out_dir / 'df_inlier.csv.gz', compression='gzip', index=False, sep='\t')
+            logging.info(f"Merged {len(df_inlier_list)} df_inlier files into df_inlier.csv.gz")
+            for f in df_inlier_files:
+                f.unlink()  # Delete the original file
 
     # Merge all df_track*.csv.gz files into one df_track.csv.gz and delete original files
     df_track_files = list(out_dir.glob('df_track_*.csv.gz'))
     if df_track_files:
-        df_track_list = [pd.read_csv(f, compression='gzip', sep='\t') for f in df_track_files]
-        df_track = pd.concat(df_track_list, ignore_index=True)
-        df_track.to_csv(out_dir / 'df_track.csv.gz', compression='gzip', index=False, sep='\t')
-        logging.info(f"Merged {len(df_track_files)} df_track files into df_track.csv.gz")
+        df_track_list = []
         for f in df_track_files:
-            f.unlink()  # Delete the original file
+            try:
+                df = pd.read_csv(f, compression='gzip', sep='\t')
+                if not df.empty:
+                    df_track_list.append(df)
+            except pd.errors.EmptyDataError:
+                logging.warning(f"Empty file skipped: {f}")
+        if df_track_list:
+            df_track = pd.concat(df_track_list, ignore_index=True)
+            df_track.to_csv(out_dir / 'df_track.csv.gz', compression='gzip', index=False, sep='\t')
+            logging.info(f"Merged {len(df_track_list)} df_track files into df_track.csv.gz")
+            for f in df_track_files:
+                f.unlink()  # Delete the original file
 
     # Stop profiling
     if args.profile:

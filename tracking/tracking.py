@@ -17,9 +17,14 @@ from itertools import combinations
 from math import floor, log10
 import time
 import logging
+import warnings
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s')
+    #filename='log_output.txt',
+    #filemode='w',)
 
 #package module(s)
 from survey.data import RawData
@@ -241,6 +246,9 @@ class Event:
        
         if in_mm: self.xyz = self._xyz_mm(width, zpos)
         else : self.xyz = self._xyz_bar()
+        # Debugging: Check for NaN values
+        if np.isnan(self.xyz).any():
+            logging.warning(f"NaN values found in Event.xyz: {self.xyz}")
         if len(self.xyz) != 0: 
             self.npts = len(np.unique(self.xyz, axis=0))
             self.dict_out['npts'] = self.npts
@@ -284,6 +292,9 @@ class Intersection:
 
     def get_intersection(self):
         self.xyz =  self.model.predict(self.z, axis=self.axis)
+        # Debugging: Check for NaN values
+        if np.isnan(self.xyz).any():
+            logging.warning(f"NaN values found in Intersection.xyz: {self.xyz}")
         for i, xyz in enumerate(self.xyz): 
             self.in_panel[i] = self.is_point_on_panel(xyz)
             
@@ -400,7 +411,10 @@ class RansacModel(TrackModel):
 
     def _get_xyz_track(self, zpan:np.ndarray): 
         
-        _xyz = Intersection(self.model_robust, zpan ).xyz
+        _xyz = Intersection(self.model_robust, zpan).xyz
+        # Debugging: Check for NaN values
+        if np.isnan(_xyz).any():
+            logging.warning(f"NaN values found in _xyz in _get_xyz_track: {_xyz}")
         self.xyz_track = np.around(_xyz,1)
         # self.dict_out['xyz_track'] = self.xyz_track
 
@@ -418,7 +432,6 @@ class RansacModel(TrackModel):
         return res
 
     def get_df_track(self, dict_zloc: dict, **kwargs) -> pd.DataFrame:
-
         loc, z = list(dict_zloc.keys()), list(dict_zloc.values())
         self._get_xyz_track(z)  
         shape = len(z)
@@ -429,6 +442,10 @@ class RansacModel(TrackModel):
             xfin, yfin, _ = self.xyz_track.T
         else:
             xfin, yfin, _ = self._get_xyz_closest_inliers(z).T
+
+        # Debugging: Check for NaN values
+        if np.isnan(xfin).any() or np.isnan(yfin).any():
+            logging.warning(f"NaN values found in xfin or yfin: xfin={xfin}, yfin={yfin}")
 
         # Acumular resultados en una lista de diccionarios
         records = []
@@ -442,7 +459,7 @@ class RansacModel(TrackModel):
         df = pd.DataFrame.from_records(records)
 
         return df
-  
+
     def get_df_model(self, **kwargs) -> pd.DataFrame:
         """Fill RANSAC inlier dataframe"""
         
@@ -610,22 +627,35 @@ class RansacTracking(Tracking):
 
 
     def format_df_cols(self):
-
-        col_trk = self.df_track.columns 
-        dtype = int
+        col_trk = self.df_track.columns
         for col in col_trk:
-            self.df_track[col] = np.ndarray.astype(self.df_track[col].values, dtype=int)
-        
-        if self.df_model is not None:  
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")  # Capture all warnings
+                try:
+                    self.df_track[col] = np.ndarray.astype(self.df_track[col].values, dtype=int)
+                except Exception as e:
+                    logging.error(f"Error while converting column {col} in df_track to int: {e}")
 
+                # Log captured warnings
+                #for warning in w:
+                #    logging.warning(f"Warning encountered in column {col} of df_track: {warning.message}. "
+                #                    f"Values: {self.df_track[col].values}")
+
+        if self.df_model is not None:
             col_mod = self.df_model.columns
+            for col in col_mod:
+                dtype = float if col in ['ADC_X', 'ADC_Y'] else int
+                with warnings.catch_warnings(record=True) as w:
+                    warnings.simplefilter("always")  # Capture all warnings
+                    try:
+                        self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
+                    except Exception as e:
+                        logging.error(f"Error while converting column {col} in df_model to {dtype.__name__}: {e}")
 
-            for col in  col_mod :
-                if col == 'ADC_X' or col =='ADC_Y':
-                    dtype = float
-                else:
-                    dtype = int
-                self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
+                    # Log captured warnings
+                    #for warning in w:
+                    #    logging.warning(f"Warning encountered in column {col} of df_model: {warning.message}. "
+                    #                    f"Values: {self.df_model[col].values}")
 
     def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=True, **kwargs_model)-> None:
         """
