@@ -417,47 +417,66 @@ class RansacModel(TrackModel):
 
         return res
 
+    def get_df_track(self, dict_zloc: dict, **kwargs) -> pd.DataFrame:
 
-    def get_df_track(self, dict_zloc:dict, **kwargs) -> pd.DataFrame:
-        
         loc, z = list(dict_zloc.keys()), list(dict_zloc.values())
-        self._get_xyz_track(z)
+        self._get_xyz_track(z)  
         shape = len(z)
-        
-        xfin, yfin = np.ones(shape), np.ones(shape) 
 
-        if 'is_fit_intersect' in kwargs.keys() :
-            if kwargs['is_fit_intersect']:
-                xfin, yfin, _ = self.xyz_track.T
-        else : 
+        xfin, yfin = np.ones(shape), np.ones(shape)
+
+        if kwargs.get('is_fit_intersect', False):
+            xfin, yfin, _ = self.xyz_track.T
+        else:
             xfin, yfin, _ = self._get_xyz_closest_inliers(z).T
-        #res =  np.concatenate(([evt.ID, evt.gold, evt.timestamp.s, evt.timestamp.ns, evt.tof, evt.npts, evt.nimpacts, self.quadsumres], xfin, yfin, [nin, nout]), axis=0)
-        
-        for i, k in enumerate(loc) : 
-            self.dict_out[f'X_{k}'], self.dict_out[f'Y_{k}']  = np.around(xfin[i],0), np.around(yfin[i],0)
 
-        df = pd.DataFrame(data=[self.dict_out])
+        # Acumular resultados en una lista de diccionarios
+        records = []
+        for i, k in enumerate(loc):
+            record = self.dict_out.copy()  # Copiar dict_out para cada iteración
+            record[f'X_{k}'] = np.around(xfin[i], 0)
+            record[f'Y_{k}'] = np.around(yfin[i], 0)
+            records.append(record)
+
+        # Crear un DataFrame a partir de todos los registros acumulados
+        df = pd.DataFrame.from_records(records)
 
         return df
-    
-
+  
     def get_df_model(self, **kwargs) -> pd.DataFrame:
         """Fill RANSAC inlier dataframe"""
-
-        df = pd.DataFrame()
+        
+        # Lista para acumular diccionarios
+        records = []
 
         for i in range(len(self.inliers)):
-            _xyz, _adc = np.around(self.evt.xyz[i,:], 0), np.around(self.evt.adc[i,:],0)
+            # Redondear coordenadas y ADC
+            _xyz = np.around(self.evt.xyz[i, :], 0)
+            _adc = np.around(self.evt.adc[i, :], 0)
+
+            # Extraer valores
             is_inl = int(self.inliers[i])
-            timestamp_s, timestamp_ns = int(self.evt.impacts[_adc[2]].timestamp.s), int(self.evt.impacts[_adc[2]].timestamp.ns)
-            _dict = {'evtID' : self.evt.ID, 'timestamp_s' : timestamp_s, 'timestamp_ns' :timestamp_ns, 'gold' : self.evt.gold, 'inlier': is_inl}
-            _dict['X'], _dict['Y'], _dict['Z'], _dict['ADC_X'], _dict['ADC_Y'] = _xyz[0], _xyz[1], _xyz[2], _adc[0], _adc[1]
-            _dftmp = pd.DataFrame(data=[_dict])
-            if i == 0 : df = _dftmp
-            else: df = pd.concat([df.astype(_dftmp.dtypes), _dftmp.astype(df.dtypes)]) #fix future pandas warning on contatenation
+            timestamp_s = int(self.evt.impacts[_adc[2]].timestamp.s)
+            timestamp_ns = int(self.evt.impacts[_adc[2]].timestamp.ns)
+
+            # Crear diccionario y agregarlo a la lista
+            records.append({
+                'evtID': self.evt.ID,
+                'timestamp_s': timestamp_s,
+                'timestamp_ns': timestamp_ns,
+                'gold': self.evt.gold,
+                'inlier': is_inl,
+                'X': _xyz[0],
+                'Y': _xyz[1],
+                'Z': _xyz[2],
+                'ADC_X': _adc[0],
+                'ADC_Y': _adc[1],
+            })
+
+        # Crear DataFrame a partir de la lista de diccionarios
+        df = pd.DataFrame.from_records(records)
 
         return df
-
 
 class OtherModel(TrackModel):
 

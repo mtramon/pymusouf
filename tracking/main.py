@@ -26,6 +26,14 @@ from tracking import RansacModel, RansacTracking
 from utils.tools import str2bool, print_progress
 
 def process_file(praw, args, kwargs_ransac, out_dir, n):
+    import cProfile
+    import pstats
+    import io
+
+    if args.profile:
+        pr = cProfile.Profile()
+        pr.enable()
+
     try:
         raw = RawData(path=praw)
         run = Run(name=praw, telescope=args.telescope, rawdata=[raw])
@@ -44,15 +52,20 @@ def process_file(praw, args, kwargs_ransac, out_dir, n):
         logging.error(f"Failed to process file {praw}: {e}")
         logging.error(traceback.format_exc())
         return None, None
+    finally:
+        if args.profile:
+            pr.disable()
+            s = io.StringIO()
+            sortby = 'cumulative'
+            ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+            ps.print_stats()
+            with open(str(out_dir / f'profiling_stats_{n}.txt'), 'w') as f:
+                f.write(s.getvalue())
 
 def process_wrapper(args):
     return process_file(*args)
 
 if __name__ == "__main__":
-
-    # Start profiling
-    pr = cProfile.Profile()
-    pr.enable()
 
     start_time = time.time()
     t0 = time.strftime("%H:%M:%S", time.localtime())
@@ -73,9 +86,14 @@ if __name__ == "__main__":
     parser.add_argument('--info', '-info', default=None, help='Additional info',type=str)
     parser.add_argument('--progress_bar', '-bar', default=False, help='Display progress bar',type=str2bool)
     parser.add_argument('--num_workers', '-nw', default=os.cpu_count(), help='Number of workers for parallel processing', type=int)
+    parser.add_argument('--profile', '-p', default=False, help='Enable profiling', type=str2bool)
     args=parser.parse_args()
 
-    # survey = CURRENT_SURVEY[args.telescope.name]
+    # Start profiling
+    pr = None
+    if args.profile:
+        pr = cProfile.Profile()
+        pr.enable()
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -145,13 +163,14 @@ if __name__ == "__main__":
             f.unlink()  # Delete the original file
 
     # Stop profiling
-    pr.disable()
-    s = io.StringIO()
-    sortby = 'cumulative'
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    with open(str(out_dir / 'profiling_stats.txt'), 'w') as f:
-        f.write(s.getvalue())
+    if args.profile:
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        with open(str(out_dir / 'profiling_stats.txt'), 'w') as f:
+            f.write(s.getvalue())
 
     t_sec = round(time.time() - start_time)
     (t_min, t_sec) = divmod(t_sec,60)
