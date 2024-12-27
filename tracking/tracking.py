@@ -349,11 +349,12 @@ class RansacModel(TrackModel):
         self.default_ransac_param = {'residual_threshold': t, "min_samples": ms, "max_trials": N,}# "stop_probability":0.99} 
     
     def get(self, **kwargs) -> None:
-        for key,par in self.default_ransac_param.items():    
-            if key not in list(kwargs.keys()): kwargs[key] = par
-               
+        for key, par in self.default_ransac_param.items():
+            if key not in list(kwargs.keys()):
+                kwargs[key] = par
+
         self.model_robust, self.inliers = None, None
-       
+
         try:
             self.model_robust, self.inliers = ransac(
                 self.evt.xyz,
@@ -365,29 +366,29 @@ class RansacModel(TrackModel):
             print(f"Event data: {self.evt.xyz}")
             print(f"RANSAC parameters: {kwargs}")
 
-    def is_valid(self)->bool:        
+    def is_valid(self) -> bool:
         model, inliers = self.model_robust, np.asarray(self.inliers)
-        
-        if model is None or inliers.size ==0:
+
+        if model is None or inliers.size == 0:
             return False
 
-        if inliers[inliers==False].size == inliers.size:
-            #if 0 inliers
-            return False
-    
-        if model.params[1][2] == 0: 
-            #parallel track
-            return False
-        
-        xyz_inliers = np.array([self.evt.xyz[i,:] for i in np.where(inliers == True)])[0,:,:]
-        if len(set(xyz_inliers[:,-1]) ) < 3: 
-            #if less than 3 impacts containing inliers
+        if inliers[inliers == False].size == inliers.size:
+            # if 0 inliers
             return False
 
-        self.outliers = self.inliers[self.inliers == False] #outlier pts are 'false' inliers
-        
+        if not hasattr(model, 'params') or model.params[1][2] == 0:
+            # parallel track or missing params attribute
+            return False
+
+        xyz_inliers = np.array([self.evt.xyz[i, :] for i in np.where(inliers == True)])[0, :, :]
+        if len(set(xyz_inliers[:, -1])) < 3:
+            # if less than 3 impacts containing inliers
+            return False
+
+        self.outliers = self.inliers[self.inliers == False]  # outlier pts are 'false' inliers
+
         self.goodness_of_fit(self.evt.xyz)
-    
+
         return True
     
 
@@ -625,14 +626,14 @@ class RansacTracking(Tracking):
         df_model_list = []
 
         for nf, file in enumerate(self.data.dataset):
-            print(f"Processing file {nf+1}/{nfiles}: {file}")
+            # print(f"Processing file {nf+1}/{nfiles}: {file}")
             lines = self.data.readfile(file)
             evt = self.initialize_event(lines[0], nPM, minPlan, maxPlan)
             last_evtID = evt.ID
             start_time = time.time()
 
             for nl, line in enumerate(lines[1:]):
-                self.log_progress(nl, len(lines), nf, nfiles, start_time)
+                # self.log_progress(nl, len(lines), nf, nfiles, start_time)
                 impm = ImpactPM(line=line)
                 impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
 
