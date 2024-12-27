@@ -98,6 +98,7 @@ if __name__ == "__main__":
         p = Path(p)
         if p.is_dir():
             rawdata_path.extend(p.glob('*.dat.gz'))
+            rawdata_path.extend(p.glob('*.npy'))
         else:
             rawdata_path.append(p)
 

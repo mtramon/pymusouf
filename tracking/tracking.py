@@ -60,24 +60,26 @@ class Impact:
     
 
     def __post_init__(self):
-       
+        if isinstance(self.line, list):
+            self.line = "\t".join(map(str, self.line))
         self._channel_no = []
         self._adc = []
         self.readline()
         
 
     def readline(self):
-        
         l = self.line.split()
-        if "\t" in self.line : l= self.line.split("\t")
+        if "\t" in self.line:
+            l = self.line.split("\t")
+
         try:
-            ts_s, self.evtID, ts_ns  = float(l[0]), int(l[1]), float(l[2])
+            ts_s, self.evtID, ts_ns  = float(l[0]), int(float(l[1])), float(l[2])
         except (ValueError, IndexError) as e:
             raise ValueError(f"Error parsing line: {self.line}\n{l}\nException: {e}")
-        if self.panelID == None: self.panelID = int(l[5])
-        self.nhits = int(l[8])
+        if self.panelID == None: self.panelID = int(float(l[5]))
+        self.nhits = int(float(l[8]))
         self.timestamp = Timestamp(ts_s, ts_ns)
-        self._channel_no = [int(l[9 + 2 * i]) for i in range(self.nhits)]
+        self._channel_no = [int(float(l[9 + 2 * i])) for i in range(self.nhits)]
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
        
         
@@ -100,21 +102,25 @@ class ImpactPM:
     impacts : Dict[int, Impact] = field(default_factory=dict)
     
     def __post_init__(self):
+        if isinstance(self.line, list):
+            self.line = "\t".join(map(str, self.line))
         self._channel_no = []
         self._adc = []
         self.readline()
 
     def readline(self):
         l = self.line.split()
-        if "\t" in self.line: l = self.line.split("\t")
+        if "\t" in self.line:
+            l = self.line.split("\t")
+
         try:
-            ts_s, self.evtID, ts_ns = float(l[0]), int(l[1]), float(l[2])
-        except:
-            raise ValueError(f"{self.line}\n{l}")
-        self.pmID = int(l[5])
-        self.nhits = int(l[8])
+            ts_s, self.evtID, ts_ns = float(l[0]), int(float(l[1])), float(l[2])
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Error parsing line: {self.line}\n{l}\nException: {e}")
+        self.pmID = int(float(l[5]))
+        self.nhits = int(float(l[8]))
         self.timestamp = Timestamp(s=ts_s, ns=ts_ns)
-        self._channel_no = [int(l[9 + 2 * i]) for i in range(self.nhits)]  
+        self._channel_no = [int(float(l[9 + 2 * i])) for i in range(self.nhits)]  
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
 
     def fill_panel_impacts(self, channelmap: ChannelMap, nPM: int, zpos: dict, minPlan: int = 6, scint_eff: float = None, langau: dict = None, tel_name: str = None, maxPlan: int = 7):

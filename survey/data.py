@@ -10,6 +10,7 @@ filename = inspect.getframeinfo(inspect.currentframe()).filename
 script_path = os.path.dirname(os.path.abspath(filename))
 import gzip
 import glob
+import numpy as np
 
 
 class DataType(Enum):
@@ -74,21 +75,28 @@ class RawData(BaseData):
         
         datalines = list()
         
-        try : 
-            if self.is_gz_file(file):
+        try:
+            if str(file).endswith('.npy'):
+                data = np.load(file, allow_pickle=True)
+                if isinstance(data, np.ndarray):
+                    datalines.extend(data.tolist())
+                else:
+                    datalines.append(data.tolist())
+                
+            elif self.is_gz_file(file):
                 with gzip.open(f"{file}", 'rt') as f:
                     for l in f:
                         if l == "\n": continue
                         datalines.append(l) 
                         
-            else : 
-                with open(f"{file}", 'rt') as f :
+            else:
+                with open(f"{file}", 'rt') as f:
                     for l in f:
                         if l == "\n": continue
                         datalines.append(l) 
 
         except OSError: 
-            raise ValueError("Data files should be either .txt or .dat format, or in compressed gunzip form '.gz' ")
+            raise ValueError("Data files should be either .txt, .dat, .npy format, or in compressed gunzip form '.gz' ")
 
         return datalines
     
