@@ -10,10 +10,12 @@ import logging
 import pandas as pd
 from multiprocessing import Pool
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 import cProfile
 import pstats
 import io
+from queue import Queue
+
 
 #personal modules
 from survey import CURRENT_SURVEY
@@ -112,29 +114,35 @@ if __name__ == "__main__":
     total_files = len(rawdata_path)
     start_time = time.time()
     with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
-        futures = [executor.submit(process_file, praw, args, kwargs_ransac, out_dir, n) for n, praw in enumerate(rawdata_path)]
-        for i, future in enumerate(as_completed(futures)):
+        futures = []
+        for n, praw in enumerate(rawdata_path):
+            futures.append(executor.submit(process_file, praw, args, kwargs_ransac, out_dir, n))
+        
+        for n, future in enumerate(as_completed(futures)):
             ftrack, fmodel = future.result()
-            if ftrack and fmodel:
-                elapsed_time = time.time() - start_time
-                remaining_time = (elapsed_time / (i + 1)) * (total_files - (i + 1))
-                logging.info(f"Progress: {((i + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
+            elapsed_time = time.time() - start_time
+            remaining_time = (elapsed_time / (n + 1)) * (total_files - (n + 1))
+            logging.info(f"Progress: {((n + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
 
-    # Merge all df_inlier*.csv.gz files into one df_inlier.csv.gz
+    # Merge all df_inlier*.csv.gz files into one df_inlier.csv.gz and delete original files
     df_inlier_files = list(out_dir.glob('df_inlier_*.csv.gz'))
     if df_inlier_files:
         df_inlier_list = [pd.read_csv(f, compression='gzip', sep='\t') for f in df_inlier_files]
         df_inlier = pd.concat(df_inlier_list, ignore_index=True)
         df_inlier.to_csv(out_dir / 'df_inlier.csv.gz', compression='gzip', index=False, sep='\t')
         logging.info(f"Merged {len(df_inlier_files)} df_inlier files into df_inlier.csv.gz")
+        for f in df_inlier_files:
+            f.unlink()  # Delete the original file
 
-    # Merge all df_track*.csv.gz files into one df_track.csv.gz
+    # Merge all df_track*.csv.gz files into one df_track.csv.gz and delete original files
     df_track_files = list(out_dir.glob('df_track_*.csv.gz'))
     if df_track_files:
         df_track_list = [pd.read_csv(f, compression='gzip', sep='\t') for f in df_track_files]
         df_track = pd.concat(df_track_list, ignore_index=True)
         df_track.to_csv(out_dir / 'df_track.csv.gz', compression='gzip', index=False, sep='\t')
         logging.info(f"Merged {len(df_track_files)} df_track files into df_track.csv.gz")
+        for f in df_track_files:
+            f.unlink()  # Delete the original file
 
     # Stop profiling
     pr.disable()
