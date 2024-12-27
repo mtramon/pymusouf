@@ -11,6 +11,9 @@ import pandas as pd
 from multiprocessing import Pool
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import cProfile
+import pstats
+import io
 
 #personal modules
 from survey import CURRENT_SURVEY
@@ -45,6 +48,10 @@ def process_wrapper(args):
 
 if __name__ == "__main__":
 
+    # Start profiling
+    pr = cProfile.Profile()
+    pr.enable()
+
     start_time = time.time()
     t0 = time.strftime("%H:%M:%S", time.localtime())
     print("Start: ", t0)#start time
@@ -63,6 +70,7 @@ if __name__ == "__main__":
     parser.add_argument('--fit_intersect', '-intersect', default=False, help='if true record line model intersection points on panel; else record closest XY inlier points to model',type=str2bool)
     parser.add_argument('--info', '-info', default=None, help='Additional info',type=str)
     parser.add_argument('--progress_bar', '-bar', default=False, help='Display progress bar',type=str2bool)
+    parser.add_argument('--num_workers', '-nw', default=os.cpu_count(), help='Number of workers for parallel processing', type=int)
     args=parser.parse_args()
 
     # survey = CURRENT_SURVEY[args.telescope.name]
@@ -90,8 +98,6 @@ if __name__ == "__main__":
                 max_trials=args.max_trials,  
     ) 
 
-    logging.info('\nRansac Tracking...\n')
-
     # Fix rawdata_path to detect all files in the directory
     rawdata_path = []
     for p in args.input_data:
@@ -102,13 +108,10 @@ if __name__ == "__main__":
         else:
             rawdata_path.append(p)
 
-    # Print the number of files to be read
-    # logging.info(f"Number of files to be read: {len(rawdata_path)}")
-
     logging.info(f"Number of files to be read: {len(rawdata_path)}")
     total_files = len(rawdata_path)
     start_time = time.time()
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
         futures = [executor.submit(process_file, praw, args, kwargs_ransac, out_dir, n) for n, praw in enumerate(rawdata_path)]
         for i, future in enumerate(as_completed(futures)):
             ftrack, fmodel = future.result()
@@ -132,6 +135,15 @@ if __name__ == "__main__":
         df_track = pd.concat(df_track_list, ignore_index=True)
         df_track.to_csv(out_dir / 'df_track.csv.gz', compression='gzip', index=False, sep='\t')
         logging.info(f"Merged {len(df_track_files)} df_track files into df_track.csv.gz")
+
+    # Stop profiling
+    pr.disable()
+    s = io.StringIO()
+    sortby = 'cumulative'
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    with open(str(out_dir / 'profiling_stats.txt'), 'w') as f:
+        f.write(s.getvalue())
 
     t_sec = round(time.time() - start_time)
     (t_min, t_sec) = divmod(t_sec,60)
