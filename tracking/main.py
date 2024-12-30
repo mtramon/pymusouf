@@ -13,6 +13,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import cProfile
 import pstats
 import io
+from logging.handlers import QueueHandler, QueueListener
+from multiprocessing import Queue
 
 # personal modules
 from survey import CURRENT_SURVEY
@@ -22,7 +24,46 @@ from telescope import str2telescope
 from tracking import RansacModel, RansacTracking
 from utils.tools import str2bool
 
+# Configure logging
+log_queue = Queue()
+queue_handler = QueueHandler(log_queue)
+handler = logging.StreamHandler(sys.stdout)
+file_handler = None
+listener = None
+
+def configure_logging(log_file):
+    global file_handler, listener
+
+    # Define the desired format
+    log_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # Create handlers
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_handler.setFormatter(log_format)  # Set format for file handler
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(log_format)  # Set format for stream handler
+
+    # Create a logger with handlers
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)  # Set the global log level
+
+    # Clear existing handlers to avoid duplicates
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
+
+    # Add handlers to QueueListener
+    listener = QueueListener(log_queue, file_handler, stream_handler)
+    listener.start()
+
+    # Add QueueHandler to the logger
+    root_logger.addHandler(QueueHandler(log_queue))
+
+    # Inform about the successful logging setup
+    root_logger.info("Logging is configured.")
+
 def process_file(praw, args, kwargs_ransac, out_dir, n):
+    logging.info(f"Processing file {praw}")
     if args.profile:
         pr = cProfile.Profile()
         pr.enable()
@@ -79,8 +120,7 @@ def merge_csv_files(file_pattern, output_file, out_dir):
 if __name__ == "__main__":
     start_time = time.time()
     t0 = time.strftime("%H:%M:%S", time.localtime())
-    print("Start: ", t0)  # start time
-
+    
     parser = argparse.ArgumentParser(
         description='''For a given muon telescope configuration, this script allows to perform RANSAC tracking and outputs trajectory-panel crossing XY coordinates''',
         epilog="""All is well that ends well."""
@@ -106,19 +146,11 @@ if __name__ == "__main__":
     strdate = time.strftime("%d%m%Y_%H%M")
     flog = out_dir / f'{strdate}.log'
 
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(flog, mode='w'),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+    configure_logging(flog)
 
+    logging.info("Starting the main process.")
     logging.info(sys.argv)
     logging.info(f"Start -- {t0}")
-    logging.info(f"Current survey: {CURRENT_SURVEY}")
     if args.info:
         logging.info(args.info)  # additional info
 
@@ -184,3 +216,6 @@ if __name__ == "__main__":
 
     logging.info(t_end)
     logging.info(f"Output directory : {out_dir}")
+
+    # Stop the QueueListener to ensure logs are flushed to the file
+    listener.stop()

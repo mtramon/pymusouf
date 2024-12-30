@@ -20,9 +20,9 @@ import logging
 import warnings
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s')
+#logging.basicConfig(
+#    level=logging.INFO,
+#    format='%(asctime)s - %(levelname)s - %(message)s')
     #filename='log_output.txt',
     #filemode='w',)
 
