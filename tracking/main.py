@@ -32,38 +32,41 @@ file_handler = None
 listener = None
 
 def configure_logging(log_file):
-    global file_handler, listener
+    global file_handler, stream_handler, listener
 
     # Define the desired format
     log_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
-    # Create handlers
-    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
-    file_handler.setFormatter(log_format)  # Set format for file handler
-
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(log_format)  # Set format for stream handler
-
     # Create a logger with handlers
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)  # Set the global log level
-
+    root_logger.setLevel(logging.DEBUG)  # Set the global log level to DEBUG
+    
     # Clear existing handlers to avoid duplicates
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
+
+    # Create handlers
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_handler.setFormatter(log_format)  # Set format for file handler
+    file_handler.setLevel(logging.DEBUG)  # Set file handler level to DEBUG
+
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(log_format)  # Set format for stream handler
+    stream_handler.setLevel(logging.DEBUG)  # Set stream handler level to DEBUG
 
     # Add handlers to QueueListener
     listener = QueueListener(log_queue, file_handler, stream_handler)
     listener.start()
 
-    # Add QueueHandler to the logger
-    root_logger.addHandler(QueueHandler(log_queue))
+    # Use QueueHandler for the root logger
+    queue_handler = QueueHandler(log_queue)
+    root_logger.addHandler(queue_handler)
 
     # Inform about the successful logging setup
     root_logger.info("Logging is configured.")
 
 def process_file(praw, args, kwargs_ransac, out_dir, n):
-    logging.info(f"Processing file {praw}")
+    # logging.info(f"Processing file {praw}")
     if args.profile:
         pr = cProfile.Profile()
         pr.enable()
@@ -76,12 +79,19 @@ def process_file(praw, args, kwargs_ransac, out_dir, n):
         tracking.process(model_type=RansacModel, progress_bar=args.progress_bar, **kwargs_ransac)
         
         ftrack = str(out_dir / f'df_track_{n}.csv.gz')
+        if tracking.df_track.empty:
+            logging.warning(f"df_track is empty for file {praw}")
         tracking.df_track.to_csv(ftrack, compression='gzip', index=False, sep='\t')
 
         fmodel = str(out_dir / f'df_inlier_{n}.csv.gz')
+        if tracking.df_model.empty:
+            logging.warning(f"df_inlier is empty for file {praw}")
         tracking.df_model.to_csv(fmodel, compression='gzip', index=False, sep='\t')
 
         return ftrack, fmodel
+    except ValueError as e:
+        logging.error(f"Aborting due to error: {e}")
+        raise  # Re-raise the exception to ensure it is caught in the main execution flow
     except Exception as e:
         logging.error(f"Failed to process file {praw}: {e}")
         logging.error(traceback.format_exc())
@@ -97,7 +107,14 @@ def process_file(praw, args, kwargs_ransac, out_dir, n):
                 f.write(s.getvalue())
 
 def process_wrapper(args):
-    return process_file(*args)
+    try:
+        return process_file(*args)
+    except ValueError as e:
+        logging.error(f"Critical error: {e}. Aborting.")
+        sys.exit(1)  # Immediate exit for critical errors
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}.")
+        return None, None
 
 def merge_csv_files(file_pattern, output_file, out_dir):
     files = list(out_dir.glob(file_pattern))
@@ -180,17 +197,34 @@ if __name__ == "__main__":
     total_files = len(rawdata_path)
     start_time = time.time()
 
-    with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
-        futures = []
-        for n, praw in enumerate(rawdata_path):
-            futures.append(executor.submit(process_file, praw, args, kwargs_ransac, out_dir, n))
-        
-        for n, future in enumerate(as_completed(futures)):
-            ftrack, fmodel = future.result()
-            if (n + 1) % max(1, total_files // 100) == 0:
-                elapsed_time = time.time() - start_time
-                remaining_time = (elapsed_time / (n + 1)) * (total_files - (n + 1))
-                logging.info(f"Progress: {((n + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
+    try:
+        with ProcessPoolExecutor(max_workers=args.num_workers) as executor:
+            futures = [
+                executor.submit(process_wrapper, (praw, args, kwargs_ransac, out_dir, n))
+                for n, praw in enumerate(rawdata_path)
+            ]
+            
+            for n, future in enumerate(as_completed(futures)):
+                try:
+                    ftrack, fmodel = future.result()
+                    if (n + 1) % max(1, total_files // 100) == 0:
+                        elapsed_time = time.time() - start_time
+                        remaining_time = (elapsed_time / (n + 1)) * (total_files - (n + 1))
+                        logging.info(f"Progress: {((n + 1) / total_files) * 100:.2f}% - Estimated time remaining: {remaining_time / 60:.2f} minutes")
+                except ValueError as e:
+                    logging.error(f"Execution aborted due to error: {e}")
+                    listener.stop()  # Stop logging
+                    sys.exit(1)  # Immediate exit on error
+                except Exception as e:
+                    logging.error(f"Unexpected critical error: {e}")
+                    listener.stop()  # Stop logging
+                    sys.exit(1)  # Immediate exit on error
+    except ValueError as e:
+        logging.error(f"Execution aborted: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Unexpected critical error: {e}")
+        sys.exit(1)
 
     # Merge all df_inlier*.csv.gz files into one df_inlier.csv.gz and delete original files
     merge_csv_files('df_inlier_*.csv.gz', 'df_inlier.csv.gz', out_dir)

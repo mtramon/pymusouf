@@ -6,12 +6,14 @@ from enum import Enum, auto
 import os
 from pathlib import Path
 import inspect
+import logging
 filename = inspect.getframeinfo(inspect.currentframe()).filename
 script_path = os.path.dirname(os.path.abspath(filename))
 import gzip
 import glob
 import numpy as np
 
+logging.basicConfig(level=logging.DEBUG)
 
 class DataType(Enum):
     real = auto()
@@ -73,6 +75,8 @@ class RawData(BaseData):
     
     def readfile(self, file):
         
+        # logging.debug("survey/data.py: Reading file %s", file)
+
         datalines = list()
         
         try:
@@ -98,6 +102,8 @@ class RawData(BaseData):
         except OSError: 
             raise ValueError("Data files should be either .txt, .dat, .npy format, or in compressed gunzip form '.gz' ")
 
+        # logging.debug(f"survey/data.py: Read {len(datalines)} lines from {file}")
+
         return datalines
     
     
@@ -119,38 +125,3 @@ if __name__ == "__main__":
     #     nlines += len(lines)
 
     # print(f"nlines = {nlines}")
-
-
-"""
-      
-    def listFilesUrl(self, url:str):
-        '''
-        List files at 'url' to be fetched
-        '''
-        page = requests.get(url).text
-        soup = BeautifulSoup(page, 'html.parser')
-        listUrl = [url + '/' + node.get('href') for node in soup.find_all('a') if node.get('href').endswith('')]
-        return listUrl
-
-
- 
-    def fetchFiles(self, nfiles:int, save_path:str):
-        '''
-        Fetch datafiles online at 'url'
-        '''
-        Path(save_path).mkdir(parents=True, exist_ok=True)   
-         #with extension '.dat.gz'
-        for i, url in enumerate(self.listFilesUrl()):
-            if i > nfiles: break 
-            file_basename = os.path.basename(url)
-            if not os.path.isfile(os.path.join(save_path, "", file_basename)):
-            #check if already existing file 
-                file = requests.get(url)
-                with open(os.path.join(save_path, "" ,file_basename), 'wb') as f:
-                    f.write(file.content)
-                f.close()
-        else : pass 
-   
-
-
-"""

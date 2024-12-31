@@ -15,54 +15,41 @@ from sklearn.linear_model import LinearRegression
 import pandas as pd
 from itertools import combinations
 from math import floor, log10
-import time
 import logging
 import warnings
-
-# Configure logging
-#logging.basicConfig(
-#    level=logging.INFO,
-#    format='%(asctime)s - %(levelname)s - %(message)s')
-    #filename='log_output.txt',
-    #filemode='w',)
+from typing import Tuple
 
 #package module(s)
 from survey.data import RawData
 from telescope import ChannelMap, Telescope
 from utils.tools import print_progress
 
-
 @dataclass
 class Hit:
-    
-    channel_no : int
-    bar_no : int
-    adc : int
-    panelID : int = field(default=0)
-    
+    channel_no: int
+    bar_no: int
+    adc: int
+    panelID: int = field(default=0)
 
 @dataclass
-class Timestamp: 
-    
-    s : int #sec
-    ns : int  #nanosec
+class Timestamp:
+    s: int  # sec
+    ns: int  # nanosec
 
     def __post_init__(self):
         prec = floor(log10(self.ns))
-        self.res = 10**(-prec) #in sec
+        self.res = 10**(-prec)  # in sec
 
-
-@dataclass 
+@dataclass
 class Impact:
     """XY hits collection on panel"""
-    line : str
-    zpos : float
-    panelID :int= field(default=None)
-    evtID: int= field(init=False)
-    timestamp : Timestamp = field(init=False)
+    line: str
+    zpos: float
+    panelID: int = field(default=None)
+    evtID: int = field(init=False)
+    timestamp: Timestamp = field(init=False)
     nhits: int = field(init=False)
-    hits : List[Hit] = field(default_factory=list)
-    
+    hits: List[Hit] = field(default_factory=list)
 
     def __post_init__(self):
         if isinstance(self.line, list):
@@ -71,6 +58,9 @@ class Impact:
         self._adc = []
         self.readline()
         
+        
+
+
 
     def readline(self):
         l = self.line.split()
@@ -78,34 +68,36 @@ class Impact:
             l = self.line.split("\t")
 
         try:
-            ts_s, self.evtID, ts_ns  = float(l[0]), int(float(l[1])), float(l[2])
+            ts_s, self.evtID, ts_ns = float(l[0]), int(float(l[1])), float(l[2])
         except (ValueError, IndexError) as e:
             raise ValueError(f"Error parsing line: {self.line}\n{l}\nException: {e}")
-        if self.panelID == None: self.panelID = int(float(l[5]))
+        if self.panelID is None:
+            self.panelID = int(float(l[5]))
         self.nhits = int(float(l[8]))
         self.timestamp = Timestamp(ts_s, ts_ns)
         self._channel_no = [int(float(l[9 + 2 * i])) for i in range(self.nhits)]
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
        
+       
+        
+
         
     def convert_ch_to_bar(self, channelmap):
-        
-        chmap  = channelmap.dict_ch_to_bar
+        chmap = channelmap.dict_ch_to_bar
         keys = list(chmap.keys())
-        _bar_no = [ chmap[ch] if ch in keys else float('nan') for ch in self._channel_no ]
-        self.hits.extend([Hit(channel_no = int(ch), bar_no= bar, adc=adc) for ch, bar, adc in zip(self._channel_no, _bar_no, self._adc)])
-     
+        _bar_no = [chmap[ch] if ch in keys else float('nan') for ch in self._channel_no]
+        self.hits.extend([Hit(channel_no=int(ch), bar_no=bar, adc=adc) for ch, bar, adc in zip(self._channel_no, _bar_no, self._adc)])
 
-@dataclass 
-class ImpactPM: 
+@dataclass
+class ImpactPM:
     """Hit collections on one PMT
     Useful for configuration where one PMT is connected to two detection panels"""
-    line : str
-    evtID : int = field(init=False)
-    timestamp : Timestamp = field(init=False)
+    line: str
+    evtID: int = field(init=False)
+    timestamp: Timestamp = field(init=False)
     nhits: int = field(init=False)
-    impacts : Dict[int, Impact] = field(default_factory=dict)
-    
+    impacts: Dict[int, Impact] = field(default_factory=dict)
+
     def __post_init__(self):
         if isinstance(self.line, list):
             self.line = "\t".join(map(str, self.line))
@@ -125,7 +117,7 @@ class ImpactPM:
         self.pmID = int(float(l[5]))
         self.nhits = int(float(l[8]))
         self.timestamp = Timestamp(s=ts_s, ns=ts_ns)
-        self._channel_no = [int(float(l[9 + 2 * i])) for i in range(self.nhits)]  
+        self._channel_no = [int(float(l[9 + 2 * i])) for i in range(self.nhits)]
         self._adc = [float(l[10 + 2 * i]) for i in range(self.nhits)]
 
     def fill_panel_impacts(self, channelmap: ChannelMap, nPM: int, zpos: dict, minPlan: int = 6, scint_eff: float = None, langau: dict = None, tel_name: str = None, maxPlan: int = 7):
@@ -178,28 +170,25 @@ class ImpactPM:
 
 @dataclass
 class Event:
-
-    ID : int 
-    timestamp : Timestamp 
-    tof : float = field(init=False) #time-of-flight
-    xyz : np.ndarray = field(init=False)
-    npts : int = 0
-    adc : np.ndarray = field(init=False)
-    impacts : Dict[int, Impact] = field(default_factory=dict) 
-    gold : bool = 0 #if an event forms exactly 1 hit per scintillation layer
-
+    ID: int
+    timestamp: Timestamp
+    tof: float = field(init=False)  # time-of-flight
+    xyz: np.ndarray = field(init=False)
+    npts: int = 0
+    adc: np.ndarray = field(init=False)
+    impacts: Dict[int, Impact] = field(default_factory=dict)
+    gold: bool = 0  # if an event forms exactly 1 hit per scintillation layer
 
     def __post_init__(self):
-        
-        self.dict_out = {}
-        self.dict_out['evtID'] = self.ID
-        self.dict_out['timestamp_s'] = self.timestamp.s
-        self.dict_out['timestamp_ns'] = self.timestamp.ns
-        self.dict_out['tof'] = None
-        self.dict_out['gold'] = self.gold
-        self.dict_out['npts'] = None
-        self.dict_out['nimpacts'] = None
-
+        self.dict_out = {
+            'evtID': self.ID,
+            'timestamp_s': self.timestamp.s,
+            'timestamp_ns': self.timestamp.ns,
+            'tof': None,
+            'gold': self.gold,
+            'npts': None,
+            'nimpacts': None
+        }
 
     def _xyz_bar(self) -> np.ndarray:
         """
@@ -212,59 +201,53 @@ class Event:
         for _, imp in self.impacts.items():  # loop on impacts (=impacted panels)
             
             z = imp.panelID
-            l_hits= [ hit for hit in imp.hits if type(hit.bar_no) == str and hit.adc != 0]
+            l_hits = [hit for hit in imp.hits if type(hit.bar_no) == str and hit.adc != 0]
             l_comb = combinations(l_hits, 2)
-            for hit1, hit2 in l_comb : 
-                if hit1.bar_no[0] == hit2.bar_no[0] : continue    
-                bar_no.extend( [( int(hit1.bar_no[1:]), int(hit2.bar_no[1:]), z) if (hit1.bar_no[0] == 'X') else (int(hit2.bar_no[1:]), int(hit1.bar_no[1:]), z) ] )
-                adc.extend( [( float(hit1.adc), float(hit2.adc), z )  if (hit1.bar_no[0] == 'X') else (float(hit2.adc), float(hit1.adc), z ) ] ) 
+            for hit1, hit2 in l_comb:
+                if hit1.bar_no[0] == hit2.bar_no[0]:
+                    continue
+                bar_no.extend([(int(hit1.bar_no[1:]), int(hit2.bar_no[1:]), z) if (hit1.bar_no[0] == 'X') else (int(hit2.bar_no[1:]), int(hit1.bar_no[1:]), z)])
+                adc.extend([(float(hit1.adc), float(hit2.adc), z) if (hit1.bar_no[0] == 'X') else (float(hit2.adc), float(hit1.adc), z)])
         arr_xyz_bar = np.asarray(bar_no)
         self.adc = np.asarray(adc)
         return arr_xyz_bar
 
-
-    def _xyz_mm(self, width:dict={}, zpos:dict={}) -> np.ndarray :
-
+    def _xyz_mm(self, width: dict = {}, zpos: dict = {}) -> np.ndarray:
         xyz = self._xyz_bar()
         arr_xyz_mm = np.ones(xyz.shape)
-        
         for i, xyz in enumerate(xyz):
-           
             z = xyz[2]
-            scint_width = width[z] #mm
-            z_coord = zpos[z] #mm
-            x_bar = xyz[0] #bar num
+            scint_width = width[z]  # mm
+            z_coord = zpos[z]  # mm
+            x_bar = xyz[0]  # bar num
             y_bar = xyz[1]
-            
-            #scint. center as pt coords
-            arr_xyz_mm[i] =  np.array([x_bar-1/2, y_bar-1/2, 1]) * np.append( np.ones(2)*scint_width,  z_coord  )
-
+            arr_xyz_mm[i] = np.array([x_bar - 1/2, y_bar - 1/2, 1]) * np.append(np.ones(2) * scint_width, z_coord)
         return arr_xyz_mm
-        
 
-    def get_xyz(self, in_mm:bool=True, width:dict={}, zpos:dict={}) -> None:
-       
-        if in_mm: self.xyz = self._xyz_mm(width, zpos)
-        else : self.xyz = self._xyz_bar()
-        # Debugging: Check for NaN values
-        if np.isnan(self.xyz).any():
-            logging.warning(f"NaN values found in Event.xyz: {self.xyz}")
-        if len(self.xyz) != 0: 
+    def get_xyz(self, in_mm: bool = True, width: dict = {}, zpos: dict = {}) -> None:
+        if in_mm:
+            self.xyz = self._xyz_mm(width, zpos)
+        else:
+            self.xyz = self._xyz_bar()
+        
+        # Debugging: Check for NaN and infinity values
+        if np.isnan(self.xyz).any() or np.isinf(self.xyz).any():
+            logging.warning(f"NaN or infinity values found in Event.xyz: {self.xyz}")
+        if len(self.xyz) != 0:
             self.npts = len(np.unique(self.xyz, axis=0))
             self.dict_out['npts'] = self.npts
-            self.nimpacts = len(list(set(self.xyz[:,-1]))) 
+            self.nimpacts = len(list(set(self.xyz[:, -1])))
             self.dict_out['nimpacts'] = self.nimpacts
 
     def get_time_of_flight(self) -> None:
-
-        l_impacts= list(self.impacts.values())
+        l_impacts = list(self.impacts.values())
         l_z = [imp.zpos for imp in l_impacts]
-        imp_front, imp_rear =  l_impacts[np.argmin(l_z)], l_impacts[np.argmax(l_z)]
+        imp_front, imp_rear = l_impacts[np.argmin(l_z)], l_impacts[np.argmax(l_z)]
         tns_front, tns_rear = imp_front.timestamp.ns, imp_rear.timestamp.ns
-        self.tof = (tns_rear-tns_front) #in 10ns
+        self.tof = (tns_rear - tns_front)  # in 10ns
         self.dict_out['tof'] = self.tof
         
-
+        
 class Model:
     @abstractmethod
     def model(self, model):
@@ -276,40 +259,33 @@ class Inliers:
         pass
 
 class Intersection:
-   
-
-    def __init__(self, model:Union[LineModelND, LinearRegression], z:np.ndarray, axis:int=2, xlim:tuple=(0,800), ylim:tuple=(0,800)):
-        
+    def __init__(self, model: Union[LineModelND, LinearRegression], z: np.ndarray, axis: int = 2, xlim: tuple = (0, 800), ylim: tuple = (0, 800)):
         self.model = model
-        self.z = z #1D panel coordinate for which we want to get straight line get_intersection points
+        self.z = z  # 1D panel coordinate for which we want to get straight line get_intersection points
         self.axis = axis
         self.xlim = xlim
         self.ylim = ylim
         self.xyz = np.zeros(shape=(len(z), 3))
-        self.in_panel =  np.zeros(shape=(len(z)), dtype=bool)
+        self.in_panel = np.zeros(shape=(len(z)), dtype=bool)
         self.get_intersection()
     
-
+    
     def get_intersection(self):
-        self.xyz =  self.model.predict(self.z, axis=self.axis)
+        self.xyz = self.model.predict(self.z, axis=self.axis)
         # Debugging: Check for NaN values
         if np.isnan(self.xyz).any():
             logging.warning(f"NaN values found in Intersection.xyz: {self.xyz}")
-        for i, xyz in enumerate(self.xyz): 
+        for i, xyz in enumerate(self.xyz):
             self.in_panel[i] = self.is_point_on_panel(xyz)
-            
 
-    def is_point_on_panel(self, xyz:np.ndarray) : 
+    def is_point_on_panel(self, xyz: np.ndarray):
         xmin, xmax = self.xlim
         ymin, ymax = self.ylim
-        if xmin <= xyz[0] and xyz[0] <= xmax and ymin <= xyz[1] and xyz[1] <= ymax: return True
-        else: return False
-          
+        return xmin <= xyz[0] <= xmax and ymin <= xyz[1] <= ymax
 
-class TrackingType(Enum): 
+class TrackingType(Enum):
     
     ransac = auto()
-
 
 class TrackModel:
     
@@ -325,21 +301,18 @@ class TrackModel:
         self.dict_out = self.evt.dict_out
         self.dict_out['quadsumres'] = None
 
-
-    def is_track_avail(self) -> bool : 
-        
+    def is_track_avail(self) -> bool:
         is_track = True
-        if self.evt.xyz.size == 0 : is_track = False
-        if len(self.evt.impacts) < 3 : is_track = False
-
+        if self.evt.xyz.size == 0:
+            is_track = False
+        if len(self.evt.impacts) < 3:
+            is_track = False
         return is_track
 
     def goodness_of_fit(self, xyz, sigma=5):
-
         self.residuals = self.model_robust.residuals(xyz)
-        self.quadsumres = np.around(np.sum(np.power(self.residuals,2)),3)
-        self.dict_out['quadsumres'] = np.around(self.quadsumres,1)
-
+        self.quadsumres = np.around(np.sum(np.power(self.residuals, 2)), 3)
+        self.dict_out['quadsumres'] = np.around(self.quadsumres, 1)
 
 class RansacModel(TrackModel):
         
@@ -348,30 +321,20 @@ class RansacModel(TrackModel):
 
         TrackModel.__init__(self, event)
         self.inliers, self.outliers = Inliers, Inliers
-        
-        #RANSAC parameters
-        self.residual_threshold = float #in same unit as xyz coordinates
-        self.min_samples = int
-        self.max_trials = int 
-        
-        t = 50 #in mm
-        p_success = 0.99 #probability of getting a pure inlier sample 
-        p_inlier = 0.5 #expected proportion of inliers in data points, assumption
-        
+        t = 50  # in mm
+        p_success = 0.99  # probability of getting a pure inlier sample
+        p_inlier = 0.5  # expected proportion of inliers in data points, assumption
         ms = 0
-        if len(self.evt.xyz) != 0 : ms = len(set( self.evt.xyz [:,-1] ) ) -1
+        if len(self.evt.xyz) != 0:
+            ms = len(set(self.evt.xyz[:, -1])) - 1
         N = 100
-        #if ms != 0 :  
-        #    N = int( np.log(1-p_success)/ np.log(1-p_inlier**ms) ) 
-        self.default_ransac_param = {'residual_threshold': t, "min_samples": ms, "max_trials": N,}# "stop_probability":0.99} 
-    
+        self.default_ransac_param = {'residual_threshold': t, "min_samples": ms, "max_trials": N}
+
     def get(self, **kwargs) -> None:
         for key, par in self.default_ransac_param.items():
             if key not in list(kwargs.keys()):
                 kwargs[key] = par
-
         self.model_robust, self.inliers = None, None
-
         try:
             self.model_robust, self.inliers = ransac(
                 self.evt.xyz,
@@ -385,18 +348,14 @@ class RansacModel(TrackModel):
 
     def is_valid(self) -> bool:
         model, inliers = self.model_robust, np.asarray(self.inliers)
-
         if model is None or inliers.size == 0:
             return False
-
         if inliers[inliers == False].size == inliers.size:
             # if 0 inliers
             return False
-
         if not hasattr(model, 'params') or model.params[1][2] == 0:
             # parallel track or missing params attribute
             return False
-
         xyz_inliers = np.array([self.evt.xyz[i, :] for i in np.where(inliers == True)])[0, :, :]
         if len(set(xyz_inliers[:, -1])) < 3:
             # if less than 3 impacts containing inliers
@@ -405,47 +364,45 @@ class RansacModel(TrackModel):
         self.outliers = self.inliers[self.inliers == False]  # outlier pts are 'false' inliers
 
         self.goodness_of_fit(self.evt.xyz)
-
         return True
-    
 
-    def _get_xyz_track(self, zpan:np.ndarray): 
-        
+    def _get_xyz_track(self, zpan: np.ndarray):
         _xyz = Intersection(self.model_robust, zpan).xyz
-        # Debugging: Check for NaN values
-        if np.isnan(_xyz).any():
-            logging.warning(f"NaN values found in _xyz in _get_xyz_track: {_xyz}")
-        self.xyz_track = np.around(_xyz,1)
-        # self.dict_out['xyz_track'] = self.xyz_track
+        # Debugging: Check for NaN and infinity values
+        if np.isnan(_xyz).any() or np.isinf(_xyz).any():
+            logging.error(f"NaN or infinity values found in _xyz in _get_xyz_track: {_xyz}")
+            raise ValueError(f"Infinity values found in _xyz in _get_xyz_track: {_xyz}")
+        self.xyz_track = np.around(_xyz, 1)
 
-    def _get_xyz_closest_inliers(self, zpan:np.ndarray) -> np.ndarray: 
-
+    def _get_xyz_closest_inliers(self, zpan: np.ndarray) -> np.ndarray:
         xyz_inliers = self.evt.xyz[self.inliers]
-        xyz_inliers_sort = xyz_inliers[xyz_inliers[:,-1].argsort()]
-        z_traversed = set(xyz_inliers_sort[:,2])
-        ix_near = np.array([np.argmin(np.array([ np.linalg.norm(xyz - self.xyz_track[self.xyz_track[:,2]==z]) for xyz in xyz_inliers_sort ]) ) if z in z_traversed else None  for z in zpan ])
-        close_xyz = np.array([ xyz_inliers_sort[ix] if ix is not None else np.zeros(3) for ix in ix_near ] ) 
+        xyz_inliers_sort = xyz_inliers[xyz_inliers[:, -1].argsort()]
+        z_traversed = set(xyz_inliers_sort[:, 2])
+        ix_near = np.array([np.argmin(np.array([np.linalg.norm(xyz - self.xyz_track[self.xyz_track[:, 2] == z]) for xyz in xyz_inliers_sort])) if z in z_traversed else None for z in zpan])
+        close_xyz = np.array([xyz_inliers_sort[ix] if ix is not None else np.zeros(3) for ix in ix_near])
         xfin, yfin, zfin = close_xyz.T
-        xfin[xfin==0.], yfin[yfin==0.] = self.xyz_track[np.where(xfin==0)[0], 0], self.xyz_track[np.where(yfin==0)[0], 1]
+        xfin[xfin == 0.], yfin[yfin == 0.] = self.xyz_track[np.where(xfin == 0)[0], 0], self.xyz_track[np.where(yfin == 0)[0], 1]
         res = np.vstack((xfin, yfin, zfin)).T
 
+        # Debugging: Check for NaN and infinity values
+        if np.isnan(res).any() or np.isinf(res).any():
+            logging.error(f"NaN or infinity values found in res in _get_xyz_closest_inliers: {res}")
+            raise ValueError(f"Infinity values found in _get_xyz_closest_inliers in _get_xyz_closest_inliers: {res}")
         return res
 
     def get_df_track(self, dict_zloc: dict, **kwargs) -> pd.DataFrame:
         loc, z = list(dict_zloc.keys()), list(dict_zloc.values())
-        self._get_xyz_track(z)  
+        self._get_xyz_track(z)
         shape = len(z)
-
         xfin, yfin = np.ones(shape), np.ones(shape)
-
         if kwargs.get('is_fit_intersect', False):
             xfin, yfin, _ = self.xyz_track.T
         else:
             xfin, yfin, _ = self._get_xyz_closest_inliers(z).T
 
-        # Debugging: Check for NaN values
-        if np.isnan(xfin).any() or np.isnan(yfin).any():
-            logging.warning(f"NaN values found in xfin or yfin: xfin={xfin}, yfin={yfin}")
+        # Debugging: Check for NaN and infinity values
+        if np.isnan(xfin).any() or np.isnan(yfin).any() or np.isinf(xfin).any() or np.isinf(yfin).any():
+            logging.warning(f"NaN or infinity values found in xfin or yfin: xfin={xfin}, yfin={yfin}")
 
         # Acumular resultados en una lista de diccionarios
         records = []
@@ -458,6 +415,16 @@ class RansacModel(TrackModel):
         # Crear un DataFrame a partir de todos los registros acumulados
         df = pd.DataFrame.from_records(records)
 
+        # Debugging: Check for NaN and infinity values in the DataFrame
+        # if df.isnull().values.any() or np.isinf(df.values).any():
+        #     logging.warning(f"NaN or infinity values found in df_track DataFrame: {df}")
+        #     raise ValueError(f"Infinity values found in df_track DataFrame '{df}'")
+
+        # Debugging: Check for infinity values in each column of the DataFrame
+        for column in df.columns:
+            if np.isinf(df[column].values).any():
+                logging.error(f"Infinity values found in df_track column '{column}': {df[column].values}")
+                raise ValueError(f"Infinity values found in df_track column '{column}'")
         return df
 
     def get_df_model(self, **kwargs) -> pd.DataFrame:
@@ -465,7 +432,6 @@ class RansacModel(TrackModel):
         
         # Lista para acumular diccionarios
         records = []
-
         for i in range(len(self.inliers)):
             # Redondear coordenadas y ADC
             _xyz = np.around(self.evt.xyz[i, :], 0)
@@ -493,6 +459,10 @@ class RansacModel(TrackModel):
         # Crear DataFrame a partir de la lista de diccionarios
         df = pd.DataFrame.from_records(records)
 
+        # Debugging: Check for NaN and infinity values in the DataFrame
+        if df.isnull().values.any() or np.isinf(df.values).any():
+            logging.warning(f"NaN or infinity values found in df_model DataFrame: {df}")
+            raise ValueError(f"Infinity values found in df_model DataFrame '{df}'")
         return df
 
 class OtherModel(TrackModel):
@@ -503,85 +473,78 @@ class OtherModel(TrackModel):
         TrackModel.__init__(self, event)
 
 
-    def get(self, *args, **kwargs) -> None: pass
-   
-    def is_valid(self, *args, **kwargs) -> bool: pass
-   
-    def get_df_track(self, *args, **kwargs) -> pd.DataFrame: pass
-   
-    def get_df_model(self, *args, **kwargs) -> pd.DataFrame: pass
+    def get(self, *args, **kwargs) -> None:
+        pass
 
+    def is_valid(self, *args, **kwargs) -> bool:
+        pass
 
-    
-class Tracking: 
-   
+    def get_df_track(self, *args, **kwargs) -> pd.DataFrame:
+        pass
 
-    def __init__(self, telescope:Telescope, data:RawData):
-       
+    def get_df_model(self, *args, **kwargs) -> pd.DataFrame:
+        pass
+
+class Tracking:
+    def __init__(self, telescope: Telescope, data: RawData):
         self.tel = telescope
-        self.data   = data
-
-        self.pmts = { pm.ID : pm for pm in self.tel.pmts}
-        self.panels = { p.ID : p for p in self.tel.panels}
-
+        self.data = data
+        self.pmts = {pm.ID: pm for pm in self.tel.pmts}
+        self.panels = {p.ID: p for p in self.tel.panels}
         self.nevt_tot, self.ngold = 0, 0
-        self.zloc  = { p.position.loc : p.position.z  for p in list(self.panels.values())}
-        self.zpos = { id : p.position.z  for id,p in self.panels.items()}
-        
+        self.zloc = {p.position.loc: p.position.z for p in list(self.panels.values())}
+        self.zpos = {id: p.position.z for id, p in self.panels.items()}
         self.df_track, self.df_model = pd.DataFrame(), pd.DataFrame()
 
-    
-    def reinit_evt(self, old_evt:Event, impact_pm:ImpactPM) -> Event:
-        
+    def reinit_evt(self, old_evt: Event, impact_pm: ImpactPM) -> Event:
         del old_evt
         #new event
         new_evtID = impact_pm.evtID
-        evt = Event(ID=new_evtID, timestamp = impact_pm.timestamp)
-        for pid, impan in impact_pm.impacts.items() : evt.impacts[pid] = impan
-        # evt.timestamp.s, evt.timestamp.ns = impact_pm.timestamp.s, impact_pm.timestamp.ns
-
+        evt = Event(ID=new_evtID, timestamp=impact_pm.timestamp)
+        for pid, impan in impact_pm.impacts.items():
+            evt.impacts[pid] = impan
         return evt
     
     
-    def filter(self, evt:Event)->bool: #evd:eventdisplay.RawEvtDisplay=None
-        '''
-        Here you can add filters to event before reconstructing the trajectory
-        '''
+    def filter(self, evt:Event)-> Tuple[bool, str]:
+        """
+        Filter events based on various conditions before trajectory reconstruction.
+
+        Parameters:
+            evt (Event): The event object containing information to be filtered.
+
+        Returns:
+            Tuple[bool, str]: A tuple indicating whether the event is filtered (is_cut)
+                            and the reason for filtering (tag).
+        """
         
         is_cut = False             
         tag = ""
-        
-        npanels = len(self.panels)
 
+        # Check if the event has any xyz data
         if len(evt.xyz) ==0 : 
-            is_cut = True
-            tag = "xyz"
-            return is_cut, tag
-       
-        #Capture selected events to be reconstructed
-        if  evt.nimpacts  < npanels-1 : 
-            is_cut = True 
-            tag = "panels"
-            return is_cut, tag   
+            return True, "xyz"
+               
+        # Make sure event impacts meet panel requirements
+        if evt.nimpacts < len(self.panels) - 1:
+            return True, "panels"   
         
-        #check hit multiplicity on each impact
-        max_multiplicity = max([len(i.hits) for _,i in evt.impacts.items()])
-        if max_multiplicity > 10: 
-            is_cut=True
-            tag = "multiplicity"
-            return is_cut, tag   
-          
-        nhits = sum([len(i.hits) for _,i in evt.impacts.items()])
-        ####is evt gold ?
-        if evt.nimpacts == npanels and nhits == 2*npanels : 
-            evt.gold = 1 
+         # Check the hit multiplicity
+        impacts = list(evt.impacts.values())
+        max_multiplicity = max(len(impact.hits) for impact in impacts)
+        if max_multiplicity > 10:
+            return True, "multiplicity"
+              
+        # Calculate total hits
+        nhits = sum(len(impact.hits) for impact in impacts)
+        
+        # Mark gold events
+        if evt.nimpacts == len(self.panels) and nhits == 2 * len(self.panels):
+            evt.gold = 1
             evt.dict_out['gold'] = evt.gold
             self.ngold += 1
+
         return is_cut, tag
-    
-
-
-        
 
 class RansacTracking(Tracking): 
 
@@ -591,40 +554,34 @@ class RansacTracking(Tracking):
         Tracking.__init__(self, telescope, data)        
 
         npanels = len(self.panels)
-        self.dict_ninliers  = {f'{npanels-1}p':[], f'{npanels}p':[]}
-        self.dict_noutliers = {f'{npanels-1}p':[], f'{npanels}p':[]}
-
+        self.dict_ninliers = {f'{npanels - 1}p': [], f'{npanels}p': []}
+        self.dict_noutliers = {f'{npanels - 1}p': [], f'{npanels}p': []}
 
     def __str__(self):
-
         npanels = len(self.panels)
         arr_nimpacts = self.df_track['nimpacts']
         arr_npts = self.df_track['npts']
-        dict_ntrack, dict_arr_npts, dict_finlier , dict_foutlier= {}, {}, {}, {}
-
+        dict_ntrack, dict_arr_npts, dict_finlier, dict_foutlier = {}, {}, {}, {}
         ntrack_tot = len(arr_nimpacts)
-        sout = f"RANSAC output:\n\t(ntrack/nevt)_tot = {ntrack_tot}/{self.nevt_tot} = {ntrack_tot/self.nevt_tot:.2f}\n"
+        sout = f"RANSAC output:\n\t(ntrack/nevt)_tot = {ntrack_tot}/{self.nevt_tot} = {ntrack_tot / self.nevt_tot:.2f}\n"
         sout += f"\tnevt_gold = {self.ngold}\n"
-        
-        for n in [npanels-1, npanels]:
-            
+        for n in [npanels - 1, npanels]:
             m = (arr_nimpacts == n)
-            if all(m == False): continue
+            if all(m == False):
+                continue
             sout += f"\t{n}-panel events : \n"
             key = f"{n}p"
-            dict_ntrack[key] =  len(arr_nimpacts[m])
+            dict_ntrack[key] = len(arr_nimpacts[m])
             npt = arr_npts[m].values
             dict_arr_npts[key] = npt
             arr_ninl = np.asarray(self.dict_ninliers[key])
             arr_noutl = np.asarray(self.dict_noutliers[key])
-            dict_finlier[key] = np.mean(arr_ninl/npt) 
-            dict_foutlier[key] = np.mean(arr_noutl/npt)
-            sout += "\t  " + "\t".join([f"(ntrack/nevt) = {dict_ntrack[key]}/{self.dict_nsel[key]} = {dict_ntrack[key]/self.dict_nsel[key] :.2f}\n" for key in  list(dict_ntrack.keys()) if self.dict_nsel[key] != 0  ] )  
-            sout += "\t  " + "\t".join([f"<f_inliers> = {val:.2f} \n" for key, val in dict_finlier.items()] )
-            sout += "\t  " + "\t".join([f"<f_outliers> = {val:.2f} \n" for key, val in dict_foutlier.items()] )
-
+            dict_finlier[key] = np.mean(arr_ninl / npt)
+            dict_foutlier[key] = np.mean(arr_noutl / npt)
+            sout += "\t  " + "\t".join([f"(ntrack/nevt) = {dict_ntrack[key]}/{self.dict_nsel[key]} = {dict_ntrack[key] / self.dict_nsel[key]:.2f}\n" for key in list(dict_ntrack.keys()) if self.dict_nsel[key] != 0])
+            sout += "\t  " + "\t".join([f"<f_inliers> = {val:.2f} \n" for key, val in dict_finlier.items()])
+            sout += "\t  " + "\t".join([f"<f_outliers> = {val:.2f} \n" for key, val in dict_foutlier.items()])
         return sout
-
 
     def format_df_cols(self):
         col_trk = self.df_track.columns
@@ -635,12 +592,6 @@ class RansacTracking(Tracking):
                     self.df_track[col] = np.ndarray.astype(self.df_track[col].values, dtype=int)
                 except Exception as e:
                     logging.error(f"Error while converting column {col} in df_track to int: {e}")
-
-                # Log captured warnings
-                #for warning in w:
-                #    logging.warning(f"Warning encountered in column {col} of df_track: {warning.message}. "
-                #                    f"Values: {self.df_track[col].values}")
-
         if self.df_model is not None:
             col_mod = self.df_model.columns
             for col in col_mod:
@@ -651,11 +602,6 @@ class RansacTracking(Tracking):
                         self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
                     except Exception as e:
                         logging.error(f"Error while converting column {col} in df_model to {dtype.__name__}: {e}")
-
-                    # Log captured warnings
-                    #for warning in w:
-                    #    logging.warning(f"Warning encountered in column {col} of df_model: {warning.message}. "
-                    #                    f"Values: {self.df_model[col].values}")
 
     def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=True, **kwargs_model)-> None:
         """
@@ -674,52 +620,107 @@ class RansacTracking(Tracking):
         maxPlan = np.max([pm.ID for pm in self.tel.pmts])
         barwidths = {i: float(p.matrix.scintillator.width) for i, p in self.panels.items()}
         npanels = len(self.panels)
-        self.dict_nsel = {f'{npanels-1}p': 0, f'{npanels}p': 0}
+        self.dict_nsel = {f'{npanels - 1}p': 0, f'{npanels}p': 0}
         nfiles = len(self.data.dataset)
-        ntrack = 0
         df_track_list = []
         df_model_list = []
+        filtered_events_count = {}  # Dictionary to store filtered events count per file
+        valid_models_count = 0  # Counter for valid models
+        tried_models_count = 0  # Counter for tried models
 
         for nf, file in enumerate(self.data.dataset):
-            # print(f"Processing file {nf+1}/{nfiles}: {file}")
             lines = self.data.readfile(file)
-            evt = self.initialize_event(lines[0], nPM, minPlan, maxPlan)
+            #evt = self.initialize_event(lines[0], nPM, minPlan, maxPlan)
+            
+            #init : 1st impact on PMT
+            impm = ImpactPM(line=lines[0])
+            #create pmt impact 
+            pmt = self.pmts[impm.pmID]
+            channelmap = pmt.channelmap
+            #create panel impacts
+            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+            evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
+
+            #Add impacts (impacted panels) to evt
+            for pid, imp in impm.impacts.items():
+                evt.impacts[pid] = imp
+            
             last_evtID = evt.ID
-            start_time = time.time()
+            filtered_events_count[file] = {}  # Initialize dictionary for each file
 
             for nl, line in enumerate(lines[1:]):
-                # self.log_progress(nl, len(lines), nf, nfiles, start_time)
+                logging.debug(f"Processing line {nl + 1}/{len(lines) - 1} for file {file}")
                 impm = ImpactPM(line=line)
                 impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
-
                 if impm.evtID == last_evtID:
-                    self.update_event(evt, impm)
+                    #self.update_event(evt, impm)
+                    for pid, imp in impm.impacts.items():
+                        evt.impacts[pid] = imp
                     if nl != len(lines) - 1:
+                        pass
+                    else:
                         continue
 
+                #if new evtID, retrieve the last evtID and reconstruct it 
+                #get coordinates     
                 evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
-                is_cut, _ = self.filter(evt)
+
+                logging.debug(f"Event ID {evt.ID} has {len(evt.xyz)} xyz points and {len(evt.impacts)} impacts")
+                is_cut, tag_cut_reason = self.filter(evt)
                 if is_cut:
+                    if tag_cut_reason not in filtered_events_count[file]:
+                        filtered_events_count[file][tag_cut_reason] = 0
+                    filtered_events_count[file][tag_cut_reason] += 1
                     evt = self.reinitialize_event(evt, impm)
                     last_evtID = evt.ID
                     if nl != len(lines) - 1:
                         self.nevt_tot += 1
                     continue
+                else:
+                    self.dict_nsel[f'{evt.nimpacts}p'] += 1
 
-                self.dict_nsel[f'{evt.nimpacts}p'] += 1
-                evt.get_time_of_flight()
-                model = self.create_model(model_type, evt, **kwargs_model)
+                try:
+                    evt.get_time_of_flight()
+                except:
+                    l_imp = list(impm.impacts.values())
+                    raise ValueError(f"{file}\n{evt.ID}\nError 'evt.get_time_of_flight()'\nl_impacts{l_imp}\nl_z={[imp.zpos for imp in l_imp]}")
+                logging.debug(f"Trying model for event ID {evt.ID}")
+                #model = self.create_model(model_type, evt, **kwargs_model)
+                
+                model = object.__new__(model_type)
+                model.__init__(evt)
+                tried_models_count += 1
 
-                if model.is_valid():
-                    df_track_list.append(model.get_df_track(dict_zloc=self.zloc))
-                    if isinstance(model, RansacModel):
-                        df_model_list.append(model.get_df_model())
-                        self.update_inliers_outliers(model, evt.nimpacts)
-
+                if model.is_track_avail():
+                    model.get(**kwargs_model)
+                    
+                    if model.is_valid():
+                        logging.debug(f"Valid model found for event ID {evt.ID}")
+                        valid_models_count += 1
+                        df_track_list.append(model.get_df_track(dict_zloc=self.zloc))
+                        
+                        if isinstance(model, RansacModel):
+                            df_model_list.append(model.get_df_model())
+                            self.update_inliers_outliers(model, evt.nimpacts)
+                    else:
+                        logging.debug(f"Model is not valid for event ID {evt.ID}")
+                    
                 evt = self.reinitialize_event(evt, impm)
                 last_evtID = evt.ID
                 if nl != len(lines) - 1:
                     self.nevt_tot += 1
+
+            # Log the filtered events count, valid models count, and tried models count for the current file
+            total_events = len(lines)
+            filtered_events = sum(filtered_events_count[file].values())
+            filtered_percentage = (filtered_events / total_events) * 100 if total_events > 0 else 0
+            valid_models_percentage = (valid_models_count / total_events) * 100 if total_events > 0 else 0
+            if filtered_events > 0:
+                logging.debug(f"Filtered events for file {file}: {filtered_events_count[file]} ({filtered_percentage:.2f}% of events were filtered)")
+            else:
+                logging.debug(f"File {file}: 0% of events were filtered")
+            logging.debug(f"Valid models for file {file}: {valid_models_count} ({valid_models_percentage:.2f}% of events had valid models)")
+            logging.debug(f"Tried models for file {file}: {tried_models_count}")
 
         if progress_bar:
             print_progress(nf + 1, nfiles, prefix='\tFile(s) processed :', suffix='completed')
@@ -728,41 +729,34 @@ class RansacTracking(Tracking):
         self.df_model = pd.concat(df_model_list, ignore_index=True) if df_model_list else pd.DataFrame()
         self.format_df_cols()
 
-    def initialize_event(self, line, nPM, minPlan, maxPlan):
-        impm = ImpactPM(line=line)
-        impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
-        evt = Event(ID=impm.evtID, timestamp=impm.timestamp)
-        for pid, imp in impm.impacts.items():
-            evt.impacts[pid] = imp
-        return evt
+    # def initialize_event(self, line, nPM, minPlan, maxPlan):
+    #     impm = ImpactPM(line=line)
+    #     impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
+    #     evt = Event(ID=impm.evtID, timestamp=impm.timestamp)
+    #     for pid, imp in impm.impacts.items():
+    #         evt.impacts[pid] = imp
+    #     return evt
 
-    def update_event(self, evt, impm):
-        for pid, imp in impm.impacts.items():
-            evt.impacts[pid] = imp
+    # def update_event(self, evt, impm):
+    #     for pid, imp in impm.impacts.items():
+    #         evt.impacts[pid] = imp
 
-    def reinitialize_event(self, old_evt, impact_pm):
+    def reinitialize_event(self, old_evt, impact_pm) -> Event:
+        logging.debug(f"Reinitializing event ID {old_evt.ID} with new event ID {impact_pm.evtID}")
         del old_evt
         new_evtID = impact_pm.evtID
         evt = Event(ID=new_evtID, timestamp=impact_pm.timestamp)
         for pid, impan in impact_pm.impacts.items():
             evt.impacts[pid] = impan
+        logging.debug(f"Reinitialized event ID {evt.ID} with {len(evt.impacts)} impacts")
         return evt
 
-    def log_progress(self, nl, total_lines, nf, nfiles, start_time):
-        if nl % 1000 == 0:
-            percent = (nl + 1) / total_lines * 100
-            elapsed_time = time.time() - start_time
-            avg_time_per_line = elapsed_time / (nl + 1) if nl > 0 else 0
-            remaining_time = avg_time_per_line * (total_lines - nl - 1)
-            remaining_str = f"{int(remaining_time // 3600)}h {int((remaining_time % 3600) // 60)}m {int(remaining_time % 60)}s" if nl > 0 else "calculating..."
-            logging.info(f"Processing line {nl+1}/{total_lines} ({percent:.2f}%) in file {nf+1}/{nfiles}. Time remaining: {remaining_str}")
-
-    def create_model(self, model_type, evt, **kwargs_model):
-        model = object.__new__(model_type)
-        model.__init__(evt)
-        if model.is_track_avail():
-            model.get(**kwargs_model)
-        return model
+    # def create_model(self, model_type, evt, **kwargs_model):
+    #     model = object.__new__(model_type)
+    #     model.__init__(evt)
+    #     if model.is_track_avail():
+    #         model.get(**kwargs_model)
+    #     return model
 
     def update_inliers_outliers(self, model, nimpacts):
         key = f'{nimpacts}p'
