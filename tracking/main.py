@@ -45,24 +45,24 @@ def configure_logging(log_file):
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    # Create handlers
+    # File handler: guarda todo (DEBUG+)
     file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
     file_handler.setFormatter(log_format)  # Set format for file handler
-    file_handler.setLevel(logging.DEBUG)  # Set file handler level to DEBUG
+    file_handler.setLevel(logging.INFO)  # Set file handler level
 
+    # Stream handler: solo WARNING y superior
     stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(log_format)  # Set format for stream handler
-    stream_handler.setLevel(logging.DEBUG)  # Set stream handler level to DEBUG
+    stream_handler.setFormatter(log_format)
+    stream_handler.setLevel(logging.WARNING)
 
-    # Add handlers to QueueListener
+    # QueueListener para ambos handlers
     listener = QueueListener(log_queue, file_handler, stream_handler)
     listener.start()
 
-    # Use QueueHandler for the root logger
+    # Usa QueueHandler para root logger
     queue_handler = QueueHandler(log_queue)
     root_logger.addHandler(queue_handler)
 
-    # Inform about the successful logging setup
     root_logger.info("Logging is configured.")
 
 def process_file(praw, args, kwargs_ransac, out_dir, n):

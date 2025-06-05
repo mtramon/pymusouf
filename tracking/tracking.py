@@ -638,7 +638,7 @@ class RansacTracking(Tracking):
             pmt = self.pmts[impm.pmID]
             channelmap = pmt.channelmap
             #create panel impacts
-            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan)
+            impm.fill_panel_impacts(channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
             evt = Event(ID = impm.evtID, timestamp = impm.timestamp)
 
             #Add impacts (impacted panels) to evt
