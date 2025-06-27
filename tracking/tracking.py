@@ -24,6 +24,8 @@ from survey.data import RawData
 from telescope import ChannelMap, Telescope
 from utils.tools import print_progress
 
+logger = logging.getLogger(__name__)
+
 @dataclass
 class Hit:
     channel_no: int
@@ -58,10 +60,6 @@ class Impact:
         self._adc = []
         self.readline()
         
-        
-
-
-
     def readline(self):
         l = self.line.split()
         if "\t" in self.line:
@@ -166,7 +164,7 @@ class ImpactPM:
                     continue
 
             # Detailed debugging information
-            print(f"Processed hit: channel={ch}, bar={chmap[ch]}, adc={adc}, panelID={panID}, tel_name={tel_name}, nPM={nPM}, minPlan={minPlan}, maxPlan={maxPlan}")
+            logger.debug(f"Processed hit: channel={ch}, bar={chmap[ch]}, adc={adc}, panelID={panID}, tel_name={tel_name}, nPM={nPM}, minPlan={minPlan}, maxPlan={maxPlan}")
 
 @dataclass
 class Event:
@@ -232,7 +230,7 @@ class Event:
         
         # Debugging: Check for NaN and infinity values
         if np.isnan(self.xyz).any() or np.isinf(self.xyz).any():
-            logging.warning(f"NaN or infinity values found in Event.xyz: {self.xyz}")
+            logger.warning(f"NaN or infinity values found in Event.xyz: {self.xyz}")
         if len(self.xyz) != 0:
             self.npts = len(np.unique(self.xyz, axis=0))
             self.dict_out['npts'] = self.npts
@@ -274,7 +272,7 @@ class Intersection:
         self.xyz = self.model.predict(self.z, axis=self.axis)
         # Debugging: Check for NaN values
         if np.isnan(self.xyz).any():
-            logging.warning(f"NaN values found in Intersection.xyz: {self.xyz}")
+            logger.warning(f"NaN values found in Intersection.xyz: {self.xyz}")
         for i, xyz in enumerate(self.xyz):
             self.in_panel[i] = self.is_point_on_panel(xyz)
 
@@ -342,9 +340,9 @@ class RansacModel(TrackModel):
                 **kwargs
             )
         except Exception as e:
-            print(f"No model found for evt {self.evt.ID}: {e}")
-            print(f"Event data: {self.evt.xyz}")
-            print(f"RANSAC parameters: {kwargs}")
+            logger.debug(f"No model found for evt {self.evt.ID}: {e}")
+            logger.debug(f"Event data: {self.evt.xyz}")
+            logger.debug(f"RANSAC parameters: {kwargs}")
 
     def is_valid(self) -> bool:
         model, inliers = self.model_robust, np.asarray(self.inliers)
@@ -370,7 +368,7 @@ class RansacModel(TrackModel):
         _xyz = Intersection(self.model_robust, zpan).xyz
         # Debugging: Check for NaN and infinity values
         if np.isnan(_xyz).any() or np.isinf(_xyz).any():
-            logging.error(f"NaN or infinity values found in _xyz in _get_xyz_track: {_xyz}")
+            logger.error(f"NaN or infinity values found in _xyz in _get_xyz_track: {_xyz}")
             raise ValueError(f"Infinity values found in _xyz in _get_xyz_track: {_xyz}")
         self.xyz_track = np.around(_xyz, 1)
 
@@ -386,7 +384,7 @@ class RansacModel(TrackModel):
 
         # Debugging: Check for NaN and infinity values
         if np.isnan(res).any() or np.isinf(res).any():
-            logging.error(f"NaN or infinity values found in res in _get_xyz_closest_inliers: {res}")
+            logger.error(f"NaN or infinity values found in res in _get_xyz_closest_inliers: {res}")
             raise ValueError(f"Infinity values found in _get_xyz_closest_inliers in _get_xyz_closest_inliers: {res}")
         return res
 
@@ -402,7 +400,7 @@ class RansacModel(TrackModel):
 
         # Debugging: Check for NaN and infinity values
         if np.isnan(xfin).any() or np.isnan(yfin).any() or np.isinf(xfin).any() or np.isinf(yfin).any():
-            logging.warning(f"NaN or infinity values found in xfin or yfin: xfin={xfin}, yfin={yfin}")
+            logger.warning(f"NaN or infinity values found in xfin or yfin: xfin={xfin}, yfin={yfin}")
 
         # Acumular resultados en una lista de diccionarios
         records = []
@@ -423,7 +421,7 @@ class RansacModel(TrackModel):
         # Debugging: Check for infinity values in each column of the DataFrame
         for column in df.columns:
             if np.isinf(df[column].values).any():
-                logging.error(f"Infinity values found in df_track column '{column}': {df[column].values}")
+                logger.error(f"Infinity values found in df_track column '{column}': {df[column].values}")
                 raise ValueError(f"Infinity values found in df_track column '{column}'")
         return df
 
@@ -461,7 +459,7 @@ class RansacModel(TrackModel):
 
         # Debugging: Check for NaN and infinity values in the DataFrame
         if df.isnull().values.any() or np.isinf(df.values).any():
-            logging.warning(f"NaN or infinity values found in df_model DataFrame: {df}")
+            logger.warning(f"NaN or infinity values found in df_model DataFrame: {df}")
             raise ValueError(f"Infinity values found in df_model DataFrame '{df}'")
         return df
 
@@ -591,7 +589,7 @@ class RansacTracking(Tracking):
                 try:
                     self.df_track[col] = np.ndarray.astype(self.df_track[col].values, dtype=int)
                 except Exception as e:
-                    logging.error(f"Error while converting column {col} in df_track to int: {e}")
+                    logger.error(f"Error while converting column {col} in df_track to int: {e}")
         if self.df_model is not None:
             col_mod = self.df_model.columns
             for col in col_mod:
@@ -601,7 +599,7 @@ class RansacTracking(Tracking):
                     try:
                         self.df_model[col] = np.ndarray.astype(self.df_model[col].values, dtype=dtype)
                     except Exception as e:
-                        logging.error(f"Error while converting column {col} in df_model to {dtype.__name__}: {e}")
+                        logger.error(f"Error while converting column {col} in df_model to {dtype.__name__}: {e}")
 
     def process(self, model_type:Union[RansacModel, OtherModel], progress_bar:bool=True, **kwargs_model)-> None:
         """
@@ -649,7 +647,7 @@ class RansacTracking(Tracking):
             filtered_events_count[file] = {}  # Initialize dictionary for each file
 
             for nl, line in enumerate(lines[1:]):
-                logging.debug(f"Processing line {nl + 1}/{len(lines) - 1} for file {file}")
+                logger.debug(f"Processing line {nl + 1}/{len(lines) - 1} for file {file}")
                 impm = ImpactPM(line=line)
                 impm.fill_panel_impacts(self.pmts[impm.pmID].channelmap, nPM, self.zpos, minPlan, tel_name=self.tel.name, maxPlan=maxPlan)
                 if impm.evtID == last_evtID:
@@ -665,7 +663,7 @@ class RansacTracking(Tracking):
                 #get coordinates     
                 evt.get_xyz(in_mm=False, width=barwidths, zpos=self.zpos)
 
-                logging.debug(f"Event ID {evt.ID} has {len(evt.xyz)} xyz points and {len(evt.impacts)} impacts")
+                logger.debug(f"Event ID {evt.ID} has {len(evt.xyz)} xyz points and {len(evt.impacts)} impacts")
                 is_cut, tag_cut_reason = self.filter(evt)
                 if is_cut:
                     if tag_cut_reason not in filtered_events_count[file]:
@@ -684,7 +682,7 @@ class RansacTracking(Tracking):
                 except:
                     l_imp = list(impm.impacts.values())
                     raise ValueError(f"{file}\n{evt.ID}\nError 'evt.get_time_of_flight()'\nl_impacts{l_imp}\nl_z={[imp.zpos for imp in l_imp]}")
-                logging.debug(f"Trying model for event ID {evt.ID}")
+                logger.debug(f"Trying model for event ID {evt.ID}")
                 #model = self.create_model(model_type, evt, **kwargs_model)
                 
                 model = object.__new__(model_type)
@@ -695,7 +693,7 @@ class RansacTracking(Tracking):
                     model.get(**kwargs_model)
                     
                     if model.is_valid():
-                        logging.debug(f"Valid model found for event ID {evt.ID}")
+                        logger.debug(f"Valid model found for event ID {evt.ID}")
                         valid_models_count += 1
                         df_track_list.append(model.get_df_track(dict_zloc=self.zloc))
                         
@@ -703,7 +701,7 @@ class RansacTracking(Tracking):
                             df_model_list.append(model.get_df_model())
                             self.update_inliers_outliers(model, evt.nimpacts)
                     else:
-                        logging.debug(f"Model is not valid for event ID {evt.ID}")
+                        logger.debug(f"Model is not valid for event ID {evt.ID}")
                     
                 evt = self.reinitialize_event(evt, impm)
                 last_evtID = evt.ID
@@ -716,11 +714,11 @@ class RansacTracking(Tracking):
             filtered_percentage = (filtered_events / total_events) * 100 if total_events > 0 else 0
             valid_models_percentage = (valid_models_count / total_events) * 100 if total_events > 0 else 0
             if filtered_events > 0:
-                logging.debug(f"Filtered events for file {file}: {filtered_events_count[file]} ({filtered_percentage:.2f}% of events were filtered)")
+                logger.debug(f"Filtered events for file {file}: {filtered_events_count[file]} ({filtered_percentage:.2f}% of events were filtered)")
             else:
-                logging.debug(f"File {file}: 0% of events were filtered")
-            logging.debug(f"Valid models for file {file}: {valid_models_count} ({valid_models_percentage:.2f}% of events had valid models)")
-            logging.debug(f"Tried models for file {file}: {tried_models_count}")
+                logger.debug(f"File {file}: 0% of events were filtered")
+            logger.debug(f"Valid models for file {file}: {valid_models_count} ({valid_models_percentage:.2f}% of events had valid models)")
+            logger.debug(f"Tried models for file {file}: {tried_models_count}")
 
         if progress_bar:
             print_progress(nf + 1, nfiles, prefix='\tFile(s) processed :', suffix='completed')
@@ -742,13 +740,13 @@ class RansacTracking(Tracking):
     #         evt.impacts[pid] = imp
 
     def reinitialize_event(self, old_evt, impact_pm) -> Event:
-        logging.debug(f"Reinitializing event ID {old_evt.ID} with new event ID {impact_pm.evtID}")
+        logger.debug(f"Reinitializing event ID {old_evt.ID} with new event ID {impact_pm.evtID}")
         del old_evt
         new_evtID = impact_pm.evtID
         evt = Event(ID=new_evtID, timestamp=impact_pm.timestamp)
         for pid, impan in impact_pm.impacts.items():
             evt.impacts[pid] = impan
-        logging.debug(f"Reinitialized event ID {evt.ID} with {len(evt.impacts)} impacts")
+        logger.debug(f"Reinitialized event ID {evt.ID} with {len(evt.impacts)} impacts")
         return evt
 
     # def create_model(self, model_type, evt, **kwargs_model):

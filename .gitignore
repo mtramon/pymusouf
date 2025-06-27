@@ -29,3 +29,4 @@ muo2d/old
 out/
 tracking/old
 test.py
+output_logs/*
