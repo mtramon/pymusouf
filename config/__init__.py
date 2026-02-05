@@ -1,1 +1,1 @@
-from .config import MAIN_PATH, FILES_DIR, SURVEY_DIR, LIST_AVAIL_SURVEY, CURRENT_SURVEY_NAME, use_paths
+from .config import STRUCT_DIR, DATA_DIR, use_paths

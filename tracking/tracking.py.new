@@ -1,0 +1,570 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from dataclasses import dataclass, field
+from itertools import product
+import logging
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import List, Dict, Union
+from skimage.measure import ransac, LineModelND
+from sklearn.linear_model import RANSACRegressor,LinearRegression
+from tqdm import tqdm
+#package module(s)
+from data import RawData
+from telescope import ChannelMap, Telescope
+
+@dataclass(slots=True)
+class Hit:
+    channel_no : int
+    bar_no : int
+    adc : float
+    panel_id : int = field(default=0)
+
+@dataclass(slots=True)
+class Timestamp: 
+    s : int #sec
+    ns : int  #nanosec
+    res: float = field(default=1e-8)  # explicite
+
+@dataclass(slots=True)
+class ImpactPanel:
+    """XY hits collection on panel"""
+    zpos : float
+    panel_id :int= field(default=None)
+    hits : List[Hit] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ImpactPM: 
+    """Hit collections on one PMT
+    Useful for configuration where one PMT is connected to two detection panels"""
+    line : str
+    evt_id : int = field(init=False)
+    timestamp : Timestamp = field(init=False)
+    pm_id: int = field(init=False)
+    nhits: int = field(init=False)
+    panel_impacts : Dict[int, ImpactPanel] = field(default_factory=dict)
+    _hits_raw : list = field(init=False)
+    
+    def __post_init__(self):
+        self.readline()
+
+    def readline(self):
+        l = self.line.split()
+        if len(l) < 9:
+            raise ValueError(f"Malformed line: {self.line}")
+        ts_s = float(l[0])
+        if ts_s < 1e9:
+            raise ValueError(f"Inconsistent timestamp: {self.line}")
+        self.evt_id = int(l[1])
+        ts_ns = float(l[2])
+        self.pm_id = int(l[5])
+        self.nhits = int(l[8])
+        expected_len = 9 + 2 * self.nhits
+        if len(l) < expected_len:
+            raise ValueError(f"Inconsistent nhits: {self.line}")
+        self.timestamp = Timestamp(s=ts_s, ns=ts_ns)
+        hits = l[9:expected_len]
+        # self._channel_no = list(map(int, hits[0::2]))
+        # self._adc = list(map(float, hits[1::2]))
+        self._hits_raw = [(int(ch), float(adc)) for ch, adc in zip(hits[0::2], hits[1::2])]
+
+    def compute_panel_id(self, ch, npm, minPlan, maxPlan):
+        if npm == 2:
+            side = 0 if ch % 8 <= 3 else 1
+            base = self.pm_id - minPlan if maxPlan is None else maxPlan - self.pm_id
+            return 2 * base + side
+        elif npm in (3, 4):
+            return self.pm_id
+        else:
+            raise ValueError("Unknown PMT configuration")
+
+    def fill_panel_impacts(self,channelmap:ChannelMap, npm:int, zpos:dict, minPlan:int=6, maxPlan:int=None, scint_eff:float=None):
+        chmap  = channelmap.dict_ch_to_bar
+        # rand = np.random.random(len(self._adc))
+        for i, (ch, adc) in enumerate(self._hits_raw):
+            if ch not in chmap:
+                continue
+            # if scint_eff is not None and rand[i] > scint_eff:
+            #     continue
+            pan_id = self.compute_panel_id(ch, npm, minPlan, maxPlan)
+            if pan_id not in self.panel_impacts.keys():
+                try:
+                    z = zpos[pan_id]
+                except KeyError:
+                    raise KeyError(f"Missing zpos for panel {pan_id}")
+                self.panel_impacts[pan_id] = ImpactPanel(
+                    panel_id=pan_id,
+                    zpos=zpos[pan_id]
+                )
+            self.panel_impacts[pan_id].hits.append(
+                Hit(channel_no=ch, bar_no=chmap[ch], adc=adc, panel_id=pan_id)
+            )
+
+def convert_bar_to_mm(xyz: np.ndarray, scint_width:np.ndarray, z_mm:np.ndarray) -> np.ndarray:
+    # Séparation des colonnes
+    x_bar = xyz[:, 0]
+    y_bar = xyz[:, 1]
+    p_ix  = xyz[:, 2].astype(int) 
+    w = scint_width[p_ix]
+    z_new = z_mm[p_ix]
+    # Facteurs multiplicatifs
+    scale = np.column_stack((w, w, z_new))
+    # Coordonnées centrées
+    base = np.column_stack((x_bar - 0.5, y_bar - 0.5, np.ones_like(x_bar)))
+    return base * scale
+
+def normalize_coords(xyz: np.ndarray, pitch_xy, pitch_ref):
+    x, y, z = xyz.T
+    s = pitch_xy[z.astype(int)] / pitch_ref
+    return np.array([x * s, y * s, z], dtype=float).T
+
+@dataclass(slots=True)
+class Event:
+    id : int 
+    timestamp : Timestamp 
+    tof : float = field(init=False) #time-of-flight
+    xyz : np.ndarray = field(init=False)
+    npts : int = 0
+    adc : np.ndarray = field(init=False)
+    nimpacts : int = field(init=False) 
+    impacts : Dict[int, ImpactPanel] = field(default_factory=dict) 
+    gold : bool = 0 #if an event forms exactly 1 hit per scintillation layer
+
+    def _xyz_bar(self, dict_ixpos) -> np.ndarray:
+        bar_no = []
+        adc = []
+        for _, imp in self.impacts.items():  # loop on impacts (=impacted panels)
+            p_ix = dict_ixpos[imp.panel_id]
+            hits_x = [h for h in imp.hits if isinstance(h.bar_no, str) and h.bar_no[0] == 'X']
+            hits_y = [h for h in imp.hits if isinstance(h.bar_no, str) and h.bar_no[0] == 'Y']
+            if not hits_x or not hits_y:
+                continue
+            for hx in hits_x:
+                for hy in hits_y:
+                    bar_no.append((int(hx.bar_no[1:]), int(hy.bar_no[1:]), p_ix))
+                    adc.append((hx.adc, hy.adc, p_ix))
+        arr_xyz_bar = np.asarray(bar_no)
+        self.adc = np.asarray(adc)
+        return arr_xyz_bar
+        
+    def get_xyz(self, dict_ixpos:dict, mm:bool=False, scint_width=None, z_mm=None) -> None:
+        """
+    
+        """
+        self.xyz = self._xyz_bar(dict_ixpos)
+        if len(self.xyz) == 0: return 
+        if mm: self.xyz = convert_bar_to_mm(self.xyz, scint_width, z_mm)
+        self.npts = self.xyz.shape[0]
+        self.nimpacts = len(list(set(self.xyz[:,-1]))) 
+
+    def get_time_of_flight(self) -> None:
+        l_impacts= list(self.impacts.values())
+        l_z = [imp.zpos for imp in l_impacts]
+        imp_front, imp_rear =  l_impacts[np.argmin(l_z)], l_impacts[np.argmax(l_z)]
+        tns_front, tns_rear = imp_front.timestamp.ns, imp_rear.timestamp.ns
+        self.tof = (tns_rear-tns_front) #in 10ns
+
+class TrackModel:
+    def __init__(self,  min_planes:int=3):
+        self.min_planes = min_planes
+
+    def _select_one_hit_per_plane(self, xyz):
+        """
+        Garde au plus un hit par plan (le plus proche de la droite brute)
+        """
+        out = []
+        for z in np.unique(xyz[:, 2]):
+            hits = xyz[xyz[:, 2] == z]
+            if hits.shape[0] == 1:
+                out.append(hits[0])
+            else:
+                # distance à une droite verticale approximative
+                bary = hits[:, 0:2].mean(axis=0)
+                d = np.linalg.norm(hits[:, 0:2] - bary, axis=1)
+                out.append(hits[np.argmin(d)])
+        return np.asarray(out)
+
+class RansacModel(TrackModel):
+        
+    def __init__(
+        self,
+        residual_threshold=1,
+        min_samples=2, 
+        max_trials=40,
+        min_planes=3,
+    ):
+        """
+        """
+        TrackModel.__init__(self, min_planes=min_planes)
+        ###Ransac params
+        self.residual_threshold = residual_threshold
+        self.min_samples = min_samples
+        self.max_trials = max_trials
+        self.min_planes = min_planes
+        ###
+        self.model = None
+        self.inliers = None
+        # self.tan_max = tan_max
+        self.valid = False
+
+    def fit(self, xyz):
+        if xyz.shape[0] < self.min_planes:
+            return
+        try:
+            model_ransac, inliers = ransac(
+                xyz,
+                LineModelND,
+                min_samples=self.min_samples,
+                residual_threshold=self.residual_threshold,
+                max_trials=self.max_trials
+            )
+        except ValueError:
+            return
+        if inliers.sum() < self.min_planes:
+            return
+        xyz_in = xyz[inliers]
+        xyz_in = self._select_one_hit_per_plane(xyz_in)
+        if xyz_in.shape[0] < self.min_planes:
+            return
+        # --- RMS
+        self.rms = np.sqrt(np.mean(model_ransac.residuals(xyz_in)))
+        self.model = model_ransac
+        self.inliers = xyz_in
+        self.valid = True
+
+class DeterministicModel:
+    """
+    Tracker déterministe pour détecteur à plans XY discrets.
+    Entrée : array xyz de forme (n,3) en indices de barreaux.
+    """
+    def __init__(
+        self,
+        nx=[16]*4,
+        ny=[16]*4,
+        residual_threshold=0.75,
+        max_rms=0.6,
+        min_planes=3,
+    ):
+        TrackModel.__init__(self, min_planes=min_planes)
+        self.nx = nx
+        self.ny = ny
+        self.residual_threshold = residual_threshold
+        self.max_rms = max_rms
+
+    # --------------------------------------------------
+    # Géométrie de base
+    # --------------------------------------------------
+    @staticmethod
+    def _line_from_points(p1, p2):
+        v = p2 - p1
+        norm = np.linalg.norm(v)
+        if norm == 0:
+            return None, None
+        return p1, v / norm
+
+    @staticmethod
+    def _point_line_distance(p, p0, v):
+        return np.linalg.norm(np.cross(p - p0, v))
+
+    @staticmethod
+    def _intersect_z(p0, v, z):
+        if abs(v[2]) < 1e-6:
+            return None
+        t = (z - p0[2]) / v[2]
+        return p0 + t * v
+    
+    def _inside_active_area(self, x, y, z):
+        # return (-0.5 <= x < self.nx - 0.5) and (-0.5 <= y < self.ny - 0.5)
+        return (0.5 <= x < self.nx[int(z)] + 0.5) and (0.5 <= y < self.ny[int(z)] + 0.5)
+    
+    # --------------------------------------------------
+    # Reconstruction principale
+    # --------------------------------------------------
+    def fit(self, xyz):
+        """
+        xyz : ndarray (n,3) avec colonnes (x_idx, y_idx, z_idx)
+
+        Retourne :
+          dict avec origin, direction, inliers, rms, n_planes
+          ou None
+        """
+        if xyz.shape[0] < self.min_planes:
+            return None
+        planes = np.unique(xyz[:, 2].astype(int))
+        if planes.size < self.min_planes:
+            return None
+        z_min = planes.min()
+        z_max = planes.max()
+        hits_min = xyz[xyz[:, 2] == z_min]
+        hits_max = xyz[xyz[:, 2] == z_max]
+        best = None
+        for h1, h2 in product(hits_min, hits_max):
+            p0, v = self._line_from_points(h1, h2)
+            if p0 is None:
+                continue
+            used_planes = set()
+            inliers = []
+            residuals = []
+            for z in planes:
+                ip = self._intersect_z(p0, v, z)
+                if ip is None:
+                    continue
+                if not self._inside_active_area(ip[0], ip[1], ip[2]):
+                    continue
+                plane_hits = xyz[xyz[:, 2] == z]
+                dists = np.linalg.norm(
+                    np.cross(plane_hits - p0, v),
+                    axis=1
+                )
+                imin = np.argmin(dists)
+                dmin = dists[imin]
+                if dmin < self.residual_threshold:
+                    inliers.append(plane_hits[imin])
+                    residuals.append(dmin)
+                    used_planes.add(z)
+            n_planes = len(used_planes)
+            if n_planes < self.min_planes:
+                continue
+            rms = np.sqrt(np.mean(np.square(residuals)))
+            if rms > self.max_rms:
+                continue
+            score = (n_planes, -rms)
+            if best is None or score > best["score"]:
+                best = dict(
+                    origin=p0,
+                    direction=v,
+                    inliers=np.array(inliers),
+                    rms=rms,
+                    n_planes=n_planes,
+                    score=score
+                )
+            # arrêt anticipé : modèle quasi parfait
+            if n_planes == planes.size and rms < 0.3:
+                break
+        return best
+
+
+    
+class Tracking: 
+   
+    def __init__(self, telescope:Telescope, data:RawData, entry_start:int=0, nev_max=int(1e8), tan_max:float=1.):
+        self.tel = telescope
+        self.data   = data
+        self.entry_start = entry_start
+        self.nev_max= nev_max
+        self.tan_max = tan_max
+       
+        self.pmts = { pm.id : pm for pm in self.tel.pmts}
+        self.panels = { p.id : p for p in self.tel.panels}
+        self.nev_tot, self.ntrack, self.ngold = 0, 0, 0
+        self.n_bad_lines = 0
+        self.dict_id_zpos = { id : p.position.z  for id,p in self.panels.items()}
+        self.dict_ixpos_zpos = { p.position.index : p.position.z  for id,p in self.panels.items()}
+        self.zpos = list(self.dict_id_zpos.values())
+        self.dict_id_ixpos = { id : p.position.index  for id,p in self.panels.items()}
+        self.dict_cfg_zpos = { cfg_name : [p.position.z  for p in cfg.panels] for cfg_name, cfg in self.tel.configurations.items()}
+        self.dict_cfg_ix = { cfg_name : [p.position.index  for p in cfg.panels] for cfg_name, cfg in self.tel.configurations.items()}
+        self.df_track, self.df_model = pd.DataFrame(), pd.DataFrame()
+        self.dict_ixpos_width = { p.position.index :  float(p.matrix.scintillator.width) for _,p  in self.panels.items() }
+        self.arr_scint_width = np.array([self.dict_ixpos_width[i] for i in range(len(self.dict_ixpos_width))])
+        self.arr_z_mm = np.array([self.dict_ixpos_zpos[i] for i in range(len(self.dict_ixpos_zpos))])
+        self.last_evt_id = None
+        self.pitch_xy = np.array([p.matrix.scintillator.width for _,p in self.panels.items()])
+        self.pitch_ref = self.tel.panels[0].matrix.scintillator.width  
+        self.fnorm_xyz = False        
+        if not all(self.pitch_xy == self.pitch_ref): self.fnorm_xyz = True
+
+    def filter(self, evt:Event)->bool:
+        npanels = len(self.panels)
+        if len(evt.xyz) ==0 : return False
+        #Capture selected events to be reconstructed
+        if  evt.nimpacts  < npanels-1 : return False
+        #check hit multiplicity on each impact
+        max_multiplicity = max([len(i.hits) for _,i in evt.impacts.items()])
+        if max_multiplicity > 10: return False
+        nhits = sum([len(i.hits) for _,i in evt.impacts.items()])
+        if evt.nimpacts == npanels and nhits == 2*npanels : 
+            #evt gold
+            evt.gold = 1 
+            self.ngold += 1
+        return True
+
+    # ------------------------------------------------------------------
+    def intersections(self, model, eps=1e-12):
+        """
+        Intersections droite / plans z
+        """
+        p0 = model.origin
+        v  = model.direction
+        points = []
+        for z in self.zpos:
+            t = (z - p0[2]) / (v[2]+eps)
+            points.append(p0 + t * v)
+        return np.asarray(points)
+
+class RansacTracking(Tracking): 
+
+    def __init__(self, telescope:Telescope, data:RawData, entry_start:int=0, nev_max=int(1e8)):
+        Tracking.__init__(self, telescope, data, entry_start, nev_max)     
+        self.maxPlan = None if telescope.name != "SXF" else 7
+        
+        
+    def _process_event(self, event:Event,):
+        """
+        Parameters
+        ----------
+        event : Event
+
+        Returns
+        -------
+        rows : list of dict
+            Une ligne par reconstruction valide (config)
+        """
+        rows = []
+        xyz_ev = event.xyz
+        # pré-séparation par plan (évite np.isin répété)
+        by_plane = {
+            int(z): xyz_ev[xyz_ev[:, 2] == z]
+            for z in np.unique(xyz_ev[:, 2])
+        }
+        for cfg_name, config in self.tel.configurations.items():
+            ixpos_cfg = self.dict_cfg_ix[cfg_name]
+            # reconstruction du sous-ensemble xyz de la config
+            planes_hits = [by_plane[z] for z in ixpos_cfg if z in by_plane]
+            if len(planes_hits) < len(config.panels):
+                # print("if len(planes_hits) < len(config.panels):")
+                continue
+            xyz_cfg = np.vstack(planes_hits)
+            if self.fnorm_xyz: xyz_cfg = normalize_coords(xyz_cfg, pitch_xy=self.pitch_xy, pitch_ref=self.pitch_ref)
+            # -------------------------
+            # 1) déterministe
+            # -------------------------
+            flag_ransac = 0
+            result = self.det_model.fit(xyz_cfg)
+            # result = None
+            if result is not None:
+                # v  = result["direction"]
+                xyz_in = result["inliers"]
+                rms = result['rms']
+            else: 
+            # -------------------------
+            # 2) fallback RANSAC
+            # -------------------------
+                flag_ransac = 1
+                self.ransac_model.fit(xyz_cfg)
+                if not self.ransac_model.valid:
+                    continue
+                # v = self.ransac_model.model.direction
+                xyz_in = self.ransac_model.inliers
+                rms = self.ransac_model.rms
+            # --- contrainte angulaire
+            # if abs(v[0] / v[2]) > self.tan_max or abs(v[1] / v[2]) > self.tan_max:
+            #     continue
+            # --- refit final en mm
+            xyz_mm = convert_bar_to_mm(xyz_in, self.arr_scint_width, self.arr_z_mm )
+            model = LineModelND.from_estimate(xyz_mm)
+            direction = model.direction
+            dz = direction[2]+1e-12
+            dx_dz = direction[0] /dz
+            dy_dz = direction[1] /dz
+            # -------------------------
+            # 5) intersections & inside
+            # -------------------------
+            pts = self.intersections(model)  # shape (n_planes, 3)
+            inside = int(
+                np.all(
+                    (pts[:, 0] >= 0) & (pts[:, 0] <= 800) &
+                    (pts[:, 1] >= 0) & (pts[:, 1] <= 800)
+                )
+            )
+            rows.append({
+                "event_id": event.id,
+                "timestamp": int(event.timestamp.s),
+                "npt": int(event.npts),
+                "config": cfg_name,
+                "dx_dz": dx_dz,
+                "dy_dz": dy_dz,
+                "dz": dz,
+                "inside": inside,
+                "rms": rms,
+                "ransac": flag_ransac
+            })
+        return rows
+
+    def main(self, file_out=None, **kwargs_model)-> None : 
+        '''
+        Process tracking data files event-by-event
+        '''
+        
+        npm = len(self.tel.pmts)
+        minPlan = min(pm.id for pm in self.tel.pmts)
+        tracks = []
+        evt = None
+        self.last_evt_id = None
+        nx, ny = [],[]
+        for p in self.tel.panels :  nx.append(p.matrix.nbars_x), ny.append(p.matrix.nbars_y)
+        thresh = kwargs_model["residual_threshold"]
+        self.det_model = DeterministicModel(nx=nx, ny=ny, residual_threshold=thresh)
+        self.ransac_model = RansacModel(
+                    **kwargs_model
+                )
+        logging.info(f"nfiles: {len(self.data.dataset)}")
+        logging.info(f"Ransac model: {vars(self.ransac_model)}")
+        print(vars(self.ransac_model))
+        for file in self.data.dataset :
+            if self.nev_tot >= self.nev_max: break
+            for line in tqdm(self.data.readfile(file), desc=f"{Path(file.stem).stem} - {self.ntrack}/{self.nev_tot}"): #
+                if self.nev_tot >= self.nev_max: break
+                try:
+                    impm = ImpactPM(line=line)
+                except ValueError as e:
+                    self.n_bad_lines += 1
+                    if self.n_bad_lines < 10:
+                        logging.warning(f"Malformed line skipped: {e}")
+                    continue         
+                try:                     
+                    pmt = self.pmts.get(impm.pm_id)
+                except KeyError as e:
+                    self.n_bad_lines += 1
+                    logging.info(f"{impm.pm_id} not found in telescope PMTs")
+                    continue  
+                if pmt is None: continue 
+                impm.fill_panel_impacts(pmt.channelmap, 
+                                        npm, 
+                                        self.dict_id_zpos,
+                                          minPlan=minPlan, 
+                                          maxPlan= self.maxPlan)
+                # Nouveau event
+                if evt is None or impm.evt_id != self.last_evt_id:
+                    if evt is not None:
+                        self._finalize_event(evt, tracks, **kwargs_model)
+                    evt = Event(id=impm.evt_id, timestamp=impm.timestamp)
+                    self.last_evt_id = impm.evt_id
+                # Accumulation
+                evt.impacts.update(impm.panel_impacts)
+                if self.ntrack % 1e5 == 0 : 
+                    if self.ntrack <= 1e6: pd.DataFrame(tracks).to_csv(file_out, compression='gzip', index=False)
+                    else: pass 
+        logging.info(f"Final ntrack/nevtot: {self.ntrack}/{self.nev_tot}")
+        # finaliser le dernier événement
+        if evt is not None and self.nev_tot < self.nev_max:
+            self._finalize_event(evt, tracks, **kwargs_model)
+        self.df_track  = pd.DataFrame(tracks)
+            
+    def _finalize_event(self, evt: Event, tracks:list, **kwargs_model) -> None:
+        evt.get_xyz(dict_ixpos=self.dict_id_ixpos)
+        if len(evt.xyz) == 0:
+            self.nev_tot += 1
+            return
+        if not self.filter(evt):
+            self.nev_tot += 1
+            return
+        # evt.get_time_of_flight()
+        self.nev_tot += 1
+        rows = self._process_event(evt)
+        if len(rows) >= 1: 
+            tracks.extend(rows)
+            self.ntrack+=1

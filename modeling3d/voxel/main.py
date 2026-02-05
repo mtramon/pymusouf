@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
-
+from datetime import datetime
 import numpy as np
 from pathlib import Path
 import time
@@ -8,8 +8,7 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.colors import Normalize, to_rgba
-#personal modules
-from config import MAIN_PATH
+#package modules
 from raypath import RayPath
 from survey import CURRENT_SURVEY
 from telescope import DICT_TEL
@@ -22,12 +21,12 @@ if __name__ == "__main__":
     t0 = time.time()
     print("Start: ", time.strftime("%H:%M:%S", time.localtime()))#start time
    
-    main_path =  MAIN_PATH #Path(__file__).parents[2]
     survey_path = CURRENT_SURVEY.path
+    print(survey_path)
     dem_path = survey_path / "dem"
-    surface_grid = CURRENT_SURVEY.surface_grid
+    surface_grid = CURRENT_SURVEY.surface_grid.reshape((-1,3)).T
+    print(surface_grid.shape)
     surface_center = CURRENT_SURVEY.surface_center
-    
     parser=argparse.ArgumentParser(
     description='''La Soufrière dome voxelization and computation of voxel - telescope ray matrices for inverse problem solving.''', epilog="""All is well that ends well.""")
     parser.add_argument('--res_vox', '-rv', default=64, help='Voxel resolution in meter',  type=int)
@@ -45,7 +44,7 @@ if __name__ == "__main__":
     dout_vox_struct.mkdir(parents=True, exist_ok=True)
     fout_vox_struct = dout_vox_struct / f"voxMatrix_res{res_vox}m.npy"
     if fout_vox_struct.exists(): 
-        print(f"Load {fout_vox_struct.relative_to(main_path)}")
+        print(f"Load {fout_vox_struct} -- {datetime.fromtimestamp(fout_vox_struct.stat().st_mtime)}")
         vox_matrix = np.load(fout_vox_struct)
         voxel.vox_matrix = vox_matrix
     else : 
@@ -63,10 +62,10 @@ if __name__ == "__main__":
         if tel_name != 'SNJ': continue
         tel = DICT_TEL[tel_name]
         tel_files_path = survey_path / "telescope"  / tel.name
-        dout_ray = tel_files_path / "raypath" / f"az{tel.azimuth:.1f}_elev{tel.elevation:.1f}" 
+        dout_ray = tel_files_path / "raypath" / f"az{tel.azimuth:.1f}ze{tel.zenith:.1f}" 
         rp = RayPath(telescope=tel,
                         surface_grid=surface_grid,)
-        rp(file=dout_ray / "raypath", max_range=max_range)
+        rp.set(file=dout_ray / "raypath", max_range=max_range)
 
         dirpb = DirectProblem(telescope=tel, 
                                     vox_matrix=voxel.vox_matrix, 
@@ -86,7 +85,7 @@ if __name__ == "__main__":
                 vol = voxel.getVolumeRegion(sv_vox=sv_vox)
                 print(f"Volume covered by {tel.name} ({c}) : {vol:.5e} m^3")
                 f.write(f"{c}\t{vol:.5e}\n")
-        print(f"Saved in {str(out_file.relative_to(main_path))}")
+        print(f"Saved in {str(out_file)}")
         
     ###PLOTS
 
@@ -132,7 +131,7 @@ if __name__ == "__main__":
                                 c="grey",
                                 linewidth=0.5 )
 
-    ltel_coord = np.array([ tel.utm for tel in ltel])
+    ltel_coord = np.array([ tel.coordinates for tel in ltel])
     ltel_color = np.array([ tel.color for tel in ltel])
     ax.scatter(ltel_coord[:,0], ltel_coord[:,1], ltel_coord[:,-1], c=ltel_color, s=40,marker='*',edgecolor='black',)
     dx, dy = 800, 1100

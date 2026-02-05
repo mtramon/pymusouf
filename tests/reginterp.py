@@ -2,7 +2,7 @@ import numpy as np
 from pathlib import Path
 import time
 from scipy.interpolate import RegularGridInterpolator, LinearNDInterpolator, NearestNDInterpolator
-#personal modules
+#package modules
 from raypath import RayPath
 from telescope import dict_tel
 #from modeling3d.voxel import Voxel, DirectProblem 
@@ -10,7 +10,7 @@ from telescope import dict_tel
 main_path = Path.cwd()
 files_path = main_path/ 'files'
 dem_path = files_path / "dem"
-filename2 = "soufriereStructure_2.npy"
+filename2 = "soufriereStructure.npy"
 surface_grid = np.load(dem_path / filename2)
 surface_center = np.loadtxt(dem_path / "volcanoCenter.txt").T
 tel = dict_tel['SNJ']
@@ -20,7 +20,7 @@ raypath = RayPath(telescope=tel,
                        surface_grid=surface_grid,)
 
 #tel.compute_angle_matrix()
-tx, ty, tz = tel.utm
+tx, ty, tz = tel.coordinates
 SX, SY, SZ = surface_grid 
 sort = np.argsort(SX)
 #sx_sort, sy_sort, SZ_sort = np.unique(SX[sort]).flatten(), np.unique(SY[sort]).flatten(), SZ[sort]

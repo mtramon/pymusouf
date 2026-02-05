@@ -2,22 +2,20 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import glob
+import yaml
 
-MAIN_PATH = Path(__file__).parents[1]
-FILES_DIR = MAIN_PATH / "files"
-SURVEY_DIR = FILES_DIR / "survey"
-LIST_AVAIL_SURVEY = [name.split('/')[-1] for name in glob.glob(str(SURVEY_DIR) + "/*")]
+with open( Path(__file__).parent / "config.yaml") as f: #same
+    try:
+        config = yaml.load(f, Loader=yaml.SafeLoader) # The FullLoader parameter handles the conversion from YAML scalar values to Python the dictionary format
+    except yaml.YAMLError as exc:
+        print(exc) 
 
-CURRENT_SURVEY_NAME =  "soufriere" #"copahue"
-
-if CURRENT_SURVEY_NAME not in LIST_AVAIL_SURVEY: raise FileExistsError(f"CURRENT_SURVEY_NAME '{CURRENT_SURVEY_NAME}' not available. \nChoose among {LIST_AVAIL_SURVEY}")
+DATA_DIR = Path(config["data_dir"])
+STRUCT_DIR = Path(config["struct_dir"])
 
 def use_paths():
-    print(f"MAIN_PATH: {MAIN_PATH}")
-    print(f"FILES_DIR: {FILES_DIR}")
-    print(f"LIST_AVAIL_SURVEY: {LIST_AVAIL_SURVEY}")
-    print(f"CURRENT_SURVEY_NAME: {CURRENT_SURVEY_NAME}")
+    print(f"DATA_DIR: {DATA_DIR}")
+    print(f"STRUCT_DIR: {STRUCT_DIR}")
 
 if __name__ == "__main__":
     use_paths()

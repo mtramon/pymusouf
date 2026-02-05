@@ -21,7 +21,7 @@ import pickle
 # with open(fpkl_cop, 'rb') as f: 
 #     frp = pickle.load(f)
 
-tel = survey.telescopes['COP']
+tel = survey.telescope['COP']
 rp = RayPath(telescope=tel, surface_grid=survey.surface_grid)
 fout = survey.path / 'telescope' / tel.name / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
 rp(file=fout, max_range=1500)

@@ -262,7 +262,7 @@ class Muo2D:
         self.opacity = Opacity()
         mask = {conf: np.isnan(thick) for conf, thick in thickness.items()}
         self.opacity.compute(model=model, 
-                             zenith=self.tel.zenithMatrix, 
+                             zenith=self.tel.zenith_matrix, 
                              flux=self.flux, 
                              mask=mask)
 

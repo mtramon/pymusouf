@@ -11,7 +11,7 @@ import argparse
 import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
-#personal modules
+#package modules
 from raypath import RayPath
 from survey import CURRENT_SURVEY, DICT_SURVEY
 
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     # files_path = main_path / 'files'
     # dem_path = files_path / "dem"
     # filename1 = "soufriereStructure.mat" #5m
-    # filename2 = "soufriereStructure_2.npy" #5m
+    # filename2 = "soufriere_dome_surface_5m.npy" #5m
     # filename3 = "soufriere_1m.npy" #1m
     # structname = filename1.split('.')[0]
     # objstruct= loadmat(str(dem_path / f"{filename1}"))
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     ax = fig.add_subplot(projection='3d')
     X1, Y1, Z1 = survey.surface_grid
     ax.plot_surface(X1, Y1, Z1, alpha=0.2, color='blue', label='structure') 
-    # ax.plot_surface(X2,Y2,Z2, alpha=0.2, color='green', label='soufriereStructure_2') 
+    # ax.plot_surface(X2,Y2,Z2, alpha=0.2, color='green', label='soufriere_region_surface') 
    # ax.plot_surface(X3,Y3,Z3, alpha=0.2, color='orange', label='soufriere_1m') 
     ax.legend()
     rmax = 1500
@@ -53,8 +53,8 @@ if __name__ == "__main__":
     color_scale_thick =  cmap_thick(norm_r)
     
 
-    for name, tel in survey.telescopes.items():
-        x,y,z = tel.utm
+    for name, tel in survey.telescope.items():
+        x,y,z = tel.coordinates
         ax.scatter(x,y,z, color=tel.color, label=name)
         raypath = RayPath(telescope=tel,
                     surface_grid=survey.surface_grid)

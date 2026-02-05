@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 import scipy.io as sio 
 
-#personal modules
+#package modules
 from telescope import Telescope
     
 class AcqVars : 
@@ -36,12 +36,12 @@ class AcqVars :
         for conf, l_panel in self.sconfig.items():
             first_panel = l_panel[0]
             last_panel = l_panel[-1]
-            nbars = int(first_panel.matrix.nbarsX)
+            nbars = int(first_panel.matrix.nbars_x)
             panel_side = barwidths[first_panel.ID] * nbars
             #length= abs(first_panel.position[1] - last_panel.position[1] )
             length= abs(first_panel.position.z - last_panel.position.z )
-            xlos = 2*first_panel.matrix.nbarsX-1
-            ylos = 2*first_panel.matrix.nbarsY-1
+            xlos = 2*first_panel.matrix.nbars_x-1
+            ylos = 2*first_panel.matrix.nbars_y-1
             #OPEN-SKY angles values
             self.az_os[conf] = np.linspace(-180, 180, xlos)
             ze_max = np.around(np.arctan(panel_side/length)*180/np.pi, 1)

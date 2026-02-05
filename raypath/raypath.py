@@ -9,8 +9,7 @@ import time
 from typing import Union
 import os 
 import pickle
-#personal modules
-from config import MAIN_PATH
+#package modules
 from survey import DICT_SURVEY
 from telescope import Telescope
 
@@ -20,13 +19,13 @@ class RayPath:
     '''
     def __init__(self, telescope:Telescope, surface_grid:np.ndarray):
         self.tel = telescope
-        self.tx, self.ty, self.tz = telescope.utm
+        self.tx, self.ty, self.tz = telescope.coordinates
         self.tel_azimuth, self.tel_zenith = telescope.azimuth*np.pi/180, telescope.zenith*np.pi/180
         self.SX, self.SY, self.SZ = surface_grid 
         self.raypath = None
     
 
-    def __call__(self, file:Union[str, Path], max_range:float):
+    def set(self, file:Union[str, Path], max_range:float):
         self.tel.compute_angle_matrix()
         self.raypath = {}
         if isinstance(file, str): file = Path(file)
@@ -35,7 +34,7 @@ class RayPath:
         if not os.path.exists(pkl_file): 
             for conf,_ in self.tel.configurations.items():
                 print(f"Compute ray paths apparent thickness for {self.tel.name} ({conf})...")
-                self.azimuthMatrix, self.zenithMatrix = self.tel.azimuthMatrix[conf], self.tel.zenithMatrix[conf]
+                self.azimuth_matrix, self.zenith_matrix = self.tel.azimuth_matrix[conf], self.tel.zenith_matrix[conf]
                 self.raypath[conf] =  self.compute_apparent_thickness(max_range=max_range)
             with open(pkl_file, 'wb') as f : 
                 pickle.dump(self.raypath, f, pickle.HIGHEST_PROTOCOL)
@@ -102,8 +101,8 @@ class RayPath:
         else : pass 
         
 
-        azimuths = self.azimuthMatrix * 180/np.pi
-        zeniths = self.zenithMatrix * 180/np.pi
+        azimuths = self.azimuth_matrix * 180/np.pi
+        zeniths = self.zenith_matrix * 180/np.pi
         elevations = 90 - zeniths
 
         shape = azimuths.shape
@@ -218,7 +217,6 @@ class RayPath:
                 else : 
                     travel_len = np.nan
                     d = np.nan
-                print(f"k={k}")
                 thickness[i,j] = travel_len
                 distance[i,j] = d
                 k = k + 1 
@@ -261,48 +259,48 @@ class RayPath:
         ) 
 
 
-RayPathSoufriere = { }
-survey = DICT_SURVEY['soufriere']
-dem_filename = "soufriereStructure_2.npy" #5m resolution 
-dem_path = survey.path / "dem"
-main_tel_path = survey.path / "telescope" 
-surface_grid = np.load(dem_path / dem_filename)
-
-for _, run in survey.runs.items(): 
-
-    tel = run.telescope
-    tel_path = main_tel_path / tel.name
-    raypath= RayPath(telescope=tel, surface_grid=surface_grid)
-    fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
-    raypath(file=fout, max_range=1500)
-    RayPathSoufriere[tel.name] = raypath
-
-
-RayPathCopahue = { }
-survey = DICT_SURVEY['copahue']
-dem_filename = "copahueStructure.npy" #5m resolution 
-dem_path = survey.path / "dem"
-main_tel_path = survey.path / "telescope" 
-surface_grid = np.load(dem_path / dem_filename)
-
-for _, run in survey.runs.items(): 
-
-    tel = run.telescope
-    tel_path = main_tel_path / tel.name
-    raypath= RayPath(telescope=tel, surface_grid=surface_grid)
-    fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
-    raypath(file=fout, max_range=1500)
-    RayPathCopahue[tel.name] = raypath
 
 if __name__ == "__main__":
-   pass
+    pass
+    RayPathSoufriere = { }
+    survey = DICT_SURVEY['soufriere']
+    dem_filename = "soufriere_region_surface.npy" #5m resolution 
+    dem_path = survey.path / "dem"
+    main_tel_path = survey.path / "telescope" 
+    surface_grid = np.load(dem_path / dem_filename)
 
-   
+    for _, run in survey.runs.items(): 
+
+        tel = run.telescope
+        tel_path = main_tel_path / tel.name
+        raypath= RayPath(telescope=tel, surface_grid=surface_grid)
+        fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
+        raypath(file=fout, max_range=1500)
+        RayPathSoufriere[tel.name] = raypath
+
+
+    RayPathCopahue = { }
+    survey = DICT_SURVEY['copahue']
+    dem_filename = "copahueStructure.npy" #5m resolution 
+    dem_path = survey.path / "dem"
+    main_tel_path = survey.path / "telescope" 
+    surface_grid = np.load(dem_path / dem_filename)
+
+    for _, run in survey.runs.items(): 
+
+        tel = run.telescope
+        tel_path = main_tel_path / tel.name
+        raypath= RayPath(telescope=tel, surface_grid=surface_grid)
+        fout = tel_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' / 'raypath'
+        raypath(file=fout, max_range=1500)
+        RayPathCopahue[tel.name] = raypath
+
+    
 
 '''
     
     def getApparentOpenSkyThickness(self):
-        ndx, ndy = self.azimuthMatrix.shape
+        ndx, ndy = self.azimuth_matrix.shape
         apparentThicknessFront, apparentThicknessRear = np.zeros(shape=(ndx, ndy)), np.zeros(shape=(ndx, ndy))
         d = 2000 # m
         NN = 2000
@@ -311,7 +309,7 @@ if __name__ == "__main__":
         #az0, ze0 = 5.181999e+01, 7.124958e+01
         for i in range(ndx): 
             for j in range(ndy):
-                az, ze = self.azimuthMatrix[i,j], self.zenithMatrix[i,j]
+                az, ze = self.azimuth_matrix[i,j], self.zenith_matrix[i,j]
                 # if ((1-eps)*az0 <= az*180/np.pi) and (az*180/np.pi <= (1+eps)*az0) :
                 #     if ((1-eps)*ze0 <= ze*180/np.pi) and (ze*180/np.pi <= (1+eps)*ze0):
                 #         pass

@@ -24,8 +24,7 @@ import sys
 sys.path.append(str(Path(__file__).parents[1]))  #needed if interactive mode
 #package module(s)
 #from acceptance import Acceptance
-from config import MAIN_PATH, SURVEY_DIR
-from forwardsolver import FluxModel 
+from flux import FluxModel 
 from filter import *
 from muo2d import Acceptance, TransmittedFluxModel, Muo2D
 from raypath import RayPathSoufriere
@@ -241,7 +240,7 @@ muo2d.mean_density.save(fout_rho)
 
 for key, _ in tel.configurations.items():
    
-    X, Y = tel.azimuthMatrix[key]*180/np.pi, tel.zenithMatrix[key]*180/np.pi
+    X, Y = tel.azimuth_matrix[key]*180/np.pi, tel.zenith_matrix[key]*180/np.pi
     
     Z = muo2d.flux.estimate[key]
     Z[Z==0] = np.nan

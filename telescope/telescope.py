@@ -12,7 +12,7 @@ import json
 import matplotlib.axes 
 
 #package module(s)
-from config import SURVEY_DIR
+from config import STRUCT_DIR
 from utils import tools
 
 
@@ -54,12 +54,12 @@ class ChannelMap:
 class Matrix:
     version : int
     scintillator : Scintillator
-    nbarsX : int
-    nbarsY : int  
+    nbars_x : int
+    nbars_y : int  
     wls_type : str
     fiber_out : str
     def __str__(self):
-        return f"v{self.version} with ({self.nbarsX}, {self.nbarsY}) {self.scintillator} scintillators"
+        return f"v{self.version} with ({self.nbars_x}, {self.nbars_y}) {self.scintillator} scintillators"
 
 
 class PositionEnum(Enum):
@@ -70,15 +70,16 @@ class PositionEnum(Enum):
 
 
 class Position:
-    def __init__(self, loc:PositionEnum, z:float):
+    def __init__(self, loc:PositionEnum, index:int, z:float):
         self.loc = loc.name 
+        self.index = index
         self.z = z  #in mm
 
 
 @dataclass(frozen=True)
 class Panel:
     matrix : Matrix 
-    ID : int
+    id : int
     channelmap : ChannelMap 
     position: Position #Tuple[PositionEnum, float] 
     def __str__(self,):
@@ -87,7 +88,7 @@ class Panel:
 
 @dataclass(frozen=True)
 class PMT:
-    ID : int
+    id : int
     panel : List[Panel] 
     channelmap : ChannelMap
     type : str = field(default='MAPMT')
@@ -100,20 +101,25 @@ class PanelConfig:
     panels : List[Panel]
     pmts : List[PMT] = field(default_factory=list)
 
+
     def __post_init__(self):
-
+        s_xy = self.panels[0].matrix.scintillator.length
         z_front, z_rear =  self.panels[0].position.z, self.panels[-1].position.z
-        object.__setattr__(self, 'length',  abs(z_front-z_rear) )
+        length_z = abs(z_front - z_rear)
+        _ext = s_xy / length_z
         # if len(self.panels) == 3:
-        #     object.__setattr__(self, 'configurations',  {'3p1':self.panels} )
-        # elif len(self.panels) == 4:
-        #     object.__setattr__(self, 'configurations',  {'3p1':self.panels[:3], 
-        #                                                  '3p2':self.panels[1:], 
-        #                                                  '4p':self.panels} )
-        # else: raise ValueError("Unknown panel configuration...")
+            # z_middle = self.panels[1].position.z
+            # if constraint on middle panel:
+            # dz = abs(z_front-z_middle)
+            # alpha = (dz/ length_z)
+            # _ext = self.get_angular_extremum(s_xy, length_z, alpha=alpha)
+        range_tanthetaxy = np.array([[-_ext, _ext], [-_ext, _ext]])
+        object.__setattr__(self, 'length_z',  length_z )
+        object.__setattr__(self, 'range_tanthetaxy',  range_tanthetaxy )
+        object.__setattr__(self, 'rays', None)    
 
-        object.__setattr__(self, 'rays', None)
-        #object.__setattr__(self, 'pixel_xy', {conf: self.get_pixel_xy(pan[0],pan[-1]) for conf, pan in self.configurations.items() }
+    def get_angular_extremum(self, size_xy, delta_z, alpha=1/2):
+        return size_xy/delta_z * min(alpha, 1-alpha)
     
     def __str__(self):
         matrices = [p.matrix for p in self.panels]
@@ -124,17 +130,17 @@ class PanelConfig:
 
 @dataclass
 class Telescope:
-    
     name : str
-    utm : np.ndarray = field(default_factory=lambda: np.ndarray(shape=(3,))) #coordinates (easting, northing, altitude)
-    altitude : float =  field(default_factory=lambda: float)
-    azimuth : float = field(default_factory=float)
-    zenith : float = field(default_factory=float)
-    elevation : float = field(default_factory=float)
+    coordinates : np.ndarray = field(default_factory=lambda: np.ndarray(shape=(3,))) #coordinates (easting, northing, altitude)
+    azimuth : float = field(default_factory=float) #deg
+    zenith : float = field(default_factory=float) #deg
+    elevation : float = field(default_factory=float) #deg 
     color : str = field(default_factory=lambda: "")
     site : str = field(default_factory=lambda: "")
     survey : str = field(default_factory=lambda: "")
-    
+    min_plan :  int = field(default_factory=lambda: int)
+    max_plan :  int = field(default_factory=lambda: int)
+
     def __post_init__(self, ): 
         self.configurations = {}
         self.panels = List[Panel]
@@ -149,10 +155,9 @@ class Telescope:
         return config
 
     def __str__(self):
-        
         sout = f"Telescope: {self.name}\n "
         if self.site : sout += f"- Site: {self.site}\n "
-        if np.all(self.utm != None) :  sout += "- UTM (easting, northing, altitude): ("+ ', '.join([f'{i:.0f}' for i  in self.utm]) + ") m\n "
+        if np.all(self.coordinates != None) :  sout += "- UTM (easting, northing, altitude): ("+ ', '.join([f'{i:.0f}' for i  in self.coordinates]) + ") m\n "
         if self.azimuth and self.elevation: sout += f"- Orientation (azimuth,elevation): ({self.azimuth}, {self.elevation}) deg\n "
         sout += "- Configurations:\n" 
         for _, conf in self.configurations.items(): sout += "\t" + conf.__str__() 
@@ -163,13 +168,13 @@ class Telescope:
         """
         Ray paths referenced as (DX,DY) couples
         """
-        nbarsXf, nbarsYf  = front_panel.matrix.nbarsX,front_panel.matrix.nbarsY
-        nbarsXr, nbarsYr  = rear_panel.matrix.nbarsX,rear_panel.matrix.nbarsY
-        barNoXf, barNoYf = np.arange(1, nbarsXf+1),np.arange(1, nbarsYf+1)
-        barNoXr, barNoYr = np.arange(1, nbarsXr+1),np.arange(1, nbarsYr+1)
+        nbars_xf, nbars_yf  = front_panel.matrix.nbars_x,front_panel.matrix.nbars_y
+        nbars_xr, nbars_yr  = rear_panel.matrix.nbars_x,rear_panel.matrix.nbars_y
+        barNoXf, barNoYf = np.arange(1, nbars_xf+1),np.arange(1, nbars_yf+1)
+        barNoXr, barNoYr = np.arange(1, nbars_xr+1),np.arange(1, nbars_yr+1)
         DX_min, DX_max = np.min(barNoXf) - np.max(barNoXr) ,  np.max(barNoXf) - np.min(barNoXr) 
         DY_min, DY_max = np.min(barNoYf) - np.max(barNoYr) ,  np.max(barNoYf) - np.min(barNoYr) 
-        mat_rays = np.mgrid[DX_min:DX_max+1:1, DY_min:DY_max+1:1].reshape(2,-1).T.reshape(2*nbarsXf-1,2*nbarsYf-1,2) 
+        mat_rays = np.mgrid[DX_min:DX_max+1:1, DY_min:DY_max+1:1].reshape(2,-1).T.reshape(2*nbars_xf-1,2*nbars_yf-1,2) 
         return mat_rays
 
 
@@ -181,7 +186,7 @@ class Telescope:
         rear = rear_panel
         L = (rear.position.z - front.position.z)  * 1e-3
         w = front.matrix.scintillator.length * 1e-3
-        nx, ny = front.matrix.nbarsX, front.matrix.nbarsY
+        nx, ny = front.matrix.nbars_x, front.matrix.nbars_y
         step = w/nx
         #mat_rays = self._get_ray_matrix(front_panel=front, rear_panel=rear)
 
@@ -210,11 +215,10 @@ class Telescope:
             for dx in arrDX:
                 xcoord = dx*step
                 mat_pixel[k,:] = np.matmul(Rinv,np.array([xcoord, ycoord, -L]).T)  #rotation
-                self.rays[k,:] = np.array([self.utm[:], self.utm[:] + mat_pixel[k,:] * rmax])
+                self.rays[k,:] = np.array([self.coordinates[:], self.coordinates[:] + mat_pixel[k,:] * rmax])
                 k += 1
         self.rays = np.flipud(self.rays)
 
-        
     def plot_ray_paths(self, ax:matplotlib.axes.Axes, front_panel:Panel, rear_panel:Panel, mask:np.ndarray=None, rmax:float=600, **kwargs):
         """
         Plot telescope ray paths (or line of sights) on given 'axis' (matplotlib.axes.Axes)
@@ -240,43 +244,60 @@ class Telescope:
             ax.scatter(self.rays[k,-1, 0], self.rays[k,-1, 1], self.rays[k,-1, 2], c=color_values[k], **kwargs)    
 
     def compute_angle_matrix(self):
-        
-        self.azimuthMatrix, self.zenithMatrix = {}, {}
-
-        for _,conf in self.configurations.items():
-            panels = conf.panels
-            nx = panels[0].matrix.nbarsX
-            wx = panels[0].matrix.scintillator.width
-            z_front, z_rear =  panels[0].position.z, panels[-1].position.z
-            L = abs(z_front-z_rear)
-            azimuthMatrix = np.zeros(shape=(nx*2-1,nx*2-1)) # different observation axis (in rad)
-            zenithMatrix = np.zeros(shape=(nx*2-1,nx*2-1)) # different observation axis (in rad)
-            rhoMatrix = np.zeros(shape=(nx*2-1,nx*2-1))
-            MrotZ  = np.array([[np.cos(self.azimuth*np.pi/180), -np.sin(self.azimuth*np.pi/180), 0],
-                        [np.sin(self.azimuth*np.pi/180), np.cos(self.azimuth*np.pi/180), 0], 
-                        [0                 ,     0           ,             1 ]])
-            MrotY  = np.array([[np.cos((-90+self.zenith)*np.pi/180), 0, np.sin((-90+self.zenith)*np.pi/180)],
-                        [0            ,            1, 0 ],                    
-                        [-np.sin((-90+self.zenith)*np.pi/180), 0, np.cos((-90+self.zenith)*np.pi/180) ]])
-            for deltaX in range(-(nx-1),(nx-1)+1): 
-                for deltaY  in range(-(nx-1), (nx-1)+1) : 
-                    #print(deltaX,deltaY)
-                    cartTelescope = np.array([L, deltaY*wx, deltaX*wx])
-                    cartTelescope = MrotZ @ MrotY @ np.transpose(cartTelescope)
-                    rho = np.sqrt(cartTelescope[0]**2 + cartTelescope[1]**2 + cartTelescope[-1]**2)
-                    phi = np.arccos(cartTelescope[-1]/rho)
-                    
-                    if (cartTelescope[1] >= 0) :
-                        theta = np.arccos(cartTelescope[0]/np.sqrt(cartTelescope[0]**2 + cartTelescope[1]**2))
-                    
-                    if (cartTelescope[1] < 0) :
-                        theta = 2*np.pi - np.arccos(cartTelescope[0]/np.sqrt(cartTelescope[0]**2 + cartTelescope[1]**2))
-                    azimuthMatrix[nx-deltaX-1,nx-deltaY-1] = theta
-                    zenithMatrix[nx-deltaX-1,nx-deltaY-1] = phi
-                    rhoMatrix[deltaX+nx-1,deltaY+nx-1] = rho
-            
-            self.azimuthMatrix[conf.name] = tools.wrapToPi(azimuthMatrix.T).T #rad
-            self.zenithMatrix[conf.name] = tools.wrapToPi(zenithMatrix.T).T #rad
+        """
+        Calcule, pour chaque configuration (3p / 4p),
+        les matrices (phi, theta) associées au binning angulaire local
+        (dx/dz, dy/dz), en tenant compte de l'orientation du télescope.
+        """
+        self.directions_matrix = {}
+        self.azimuth_matrix = {}
+        self.zenith_matrix = {}
+        az = np.pi/2 - np.deg2rad(self.azimuth)
+        ze = np.pi/2 - np.deg2rad(self.elevation)
+        # Rotation autour de Z (azimuth)
+        Rz = np.array([
+            [ np.cos(az), -np.sin(az), 0.0],
+            [ np.sin(az),  np.cos(az), 0.0],
+            [ 0.0       ,  0.0       , 1.0]
+        ])
+        # Rotation autour de Y (élévation)
+        Ry = np.array([
+            [ np.cos(ze), 0.0, np.sin(ze)],
+            [ 0.0       , 1.0, 0.0       ],
+            [-np.sin(ze), 0.0, np.cos(ze)]
+        ])
+        R = Rz @ Ry  # rotation locale → globale
+        for _, conf in self.configurations.items():
+            front = conf.panels[0]
+            nx = front.matrix.nbars_x
+            ny = front.matrix.nbars_y
+            w  = front.matrix.scintillator.width
+            dz = conf.length_z
+            nbin_x = 2 * nx - 1
+            nbin_y = 2 * ny - 1
+            dir_mat = np.zeros((nbin_x, nbin_y, 3))
+            phi_mat   = np.zeros((nbin_x, nbin_y))
+            theta_mat = np.zeros((nbin_x, nbin_y))
+            for j, dy in enumerate(range(-ny + 1, ny)):
+                for i, dx in enumerate(range(-nx + 1, nx)):
+                    # Direction locale (x, y, z)
+                    v_local = np.array([
+                        dx * w,
+                        dy * w,
+                        dz,
+                    ], dtype=float)
+                    v_local /= np.linalg.norm(v_local)
+                    # Direction globale
+                    v_global = R @ v_local
+                    dir_mat[i, j] = v_global
+                    # Angles sphériques
+                    phi   = np.arctan2(v_global[1], v_global[0])   # [-π, π]
+                    theta = np.arccos(v_global[2])                 # [0, π]
+                    phi_mat[i, j]   = phi
+                    theta_mat[i, j] = theta
+            self.directions_matrix[conf.name] = dir_mat
+            self.azimuth_matrix[conf.name] = tools.wrapToPi(phi_mat)
+            self.zenith_matrix[conf.name]  = theta_mat
 
 
     def get_pixel_xy(self):
@@ -285,17 +306,17 @@ class Telescope:
         """
         func = lambda xf,xr: xf-xr
         front_panel, rear_panel = self.panels[0], self.panels[-1]
-        nbarsXf, nbarsYf  = front_panel.matrix.nbarsX,front_panel.matrix.nbarsY
-        nbarsXr, nbarsYr  = rear_panel.matrix.nbarsX,rear_panel.matrix.nbarsY
-        barNoXf, barNoYf = np.arange(1, nbarsXf+1),np.arange(1, nbarsYf+1)
-        barNoXr, barNoYr = np.arange(1, nbarsXr+1),np.arange(1, nbarsYr+1)
+        nbars_xf, nbars_yf  = front_panel.matrix.nbars_x,front_panel.matrix.nbars_y
+        nbars_xr, nbars_yr  = rear_panel.matrix.nbars_x,rear_panel.matrix.nbars_y
+        barNoXf, barNoYf = np.arange(1, nbars_xf+1),np.arange(1, nbars_yf+1)
+        barNoXr, barNoYr = np.arange(1, nbars_xr+1),np.arange(1, nbars_yr+1)
         DX_min, DX_max = np.min(barNoXf) - np.max(barNoXr) ,  np.max(barNoXf) - np.min(barNoXr) 
         DY_min, DY_max = np.min(barNoYf) - np.max(barNoYr) ,  np.max(barNoYf) - np.min(barNoYr) 
-        res_dx = np.tile(np.mgrid[DX_min:DX_max+1:1],  (2*nbarsXf-1, 1)).T
-        res_dy = np.tile(np.mgrid[DY_min:DY_max+1:1],  (2*nbarsYf-1, 1))
+        res_dx = np.tile(np.mgrid[DX_min:DX_max+1:1],  (2*nbars_xf-1, 1)).T
+        res_dy = np.tile(np.mgrid[DY_min:DY_max+1:1],  (2*nbars_yf-1, 1))
         mat_dx, mat_dy = np.zeros(shape=(res_dx.shape[0],res_dx.shape[1],2)), np.zeros(shape=(res_dy.shape[0],res_dy.shape[1],2))
-        for i in range(1,nbarsXf+1): 
-            for j in np.flip(range(1,nbarsXf+1)): 
+        for i in range(1,nbars_xf+1): 
+            for j in np.flip(range(1,nbars_xf+1)): 
                 mat_dx[res_dx==func(i,j),:] = [i,j]
                 mat_dy[res_dy==func(i,j),:] = [i,j]
         mat = np.concatenate((mat_dx, mat_dy), axis=2)
@@ -311,11 +332,11 @@ class Telescope:
         zticks=[]
         for p in self.panels:
             w  = float(p.matrix.scintillator.width)
-            nbarsX = int(p.matrix.nbarsX)
-            nbarsY = int(p.matrix.nbarsY)
-            sx = w*nbarsX 
-            sy = w*nbarsY
-            x, y = np.linspace(position[0], position[0]+sx , nbarsX+1 ), np.linspace(position[0], position[0]+sy , nbarsX+1 )
+            nbars_x = int(p.matrix.nbars_x)
+            nbars_y = int(p.matrix.nbars_y)
+            sx = w*nbars_x 
+            sy = w*nbars_y
+            x, y = np.linspace(position[0], position[0]+sx , nbars_x+1 ), np.linspace(position[0], position[0]+sy , nbars_x+1 )
             X, Y = np.meshgrid(x, y)
             zpos = position[2]
             Z = np.ones(shape=X.shape)*(zpos + p.position.z)
@@ -330,7 +351,7 @@ class Telescope:
         Z = np.ones(shape=X.shape)*(zpos + zshield)
         ax.plot_surface(X,Y,Z, alpha=0.1, color='none', edgecolor='tomato' )
         ax.text(0, 0, zshield, "Shielding", 'y', alpha=0.5, color='grey')
-        panel_side=float(self.panels[0].matrix.nbarsX)*float(self.panels[0].matrix.scintillator.width)
+        panel_side=float(self.panels[0].matrix.nbars_x)*float(self.panels[0].matrix.scintillator.width)
         ax.set_xlabel("X [mm]")
         ax.set_ylabel("Y [mm]")
         ax.set_xticks(np.linspace(0, panel_side, 3))
@@ -343,15 +364,14 @@ class Telescope:
         ax.set_zticks(zticks)
         ax.set_zticklabels([])
         ax.annotate("Z", xy=(0.5, .5), xycoords='axes fraction', xytext=(0.04, .78),)
-        
         return ax
 
 scint_Fermi = Scintillator(type="Fermilab", length=800, width=50, thickness=7 )
 scint_JINR = Scintillator(type="JINR", length=800, width=25, thickness=7 )
-matrixv1_1 = Matrix(version="1.1",  scintillator=scint_Fermi, nbarsX=16, nbarsY=16, wls_type="BCF91A",fiber_out="TR644 POM")
-matrixv2_0 = Matrix(version="2.0",  scintillator=scint_JINR, nbarsX=32, nbarsY=32, wls_type="Y11",fiber_out="TR644 POM")
+matrixv1_1 = Matrix(version="1.1",  scintillator=scint_Fermi, nbars_x=16, nbars_y=16, wls_type="BCF91A",fiber_out="TR644 POM")
+matrixv2_0 = Matrix(version="2.0",  scintillator=scint_JINR, nbars_x=32, nbars_y=32, wls_type="Y11",fiber_out="TR644 POM")
 
-survey_path = SURVEY_DIR
+survey_path = STRUCT_DIR
 souf_tel_path = survey_path / "soufriere" / "telescope"
 cop_tel_path  = survey_path / "copahue" / "telescope"
 
@@ -359,35 +379,37 @@ cop_tel_path  = survey_path / "copahue" / "telescope"
 tel_name = 'BR'
 tel_BR = Telescope(name=tel_name)
 
-tel_BR.utm = np.array([643345.81, 1774030.46,1267])
-tel_BR.altitude = tel_BR.utm[-1]
-tel_BR.azimuth = 297.0#295.
-tel_BR.zenith = 80.0#16.
+tel_BR.coordinates = np.array([643345.81, 1774030.46,1267])
+tel_BR.azimuth = 297#295.
+tel_BR.zenith = 80#16.
 tel_BR.elevation = round(90.0-tel_BR.zenith, 1) #16
 tel_BR.site = "Rocher Fendu - Soufrière"
 tel_BR.color = "red"
 
 chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
 chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap32)
-front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
-middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap32)
-rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap32) 
+id_front = 23
+front_panel = Panel(matrix = matrixv2_0, id=id_front, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
+front_pmt = PMT(id=id_front, panel=front_panel, channelmap=chmap32) 
+id_middle = 24
+middle1_panel = Panel(matrix = matrixv1_1, id=id_middle, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
+middle1_pmt = PMT(id=id_middle, panel=middle1_panel, channelmap=chmap16) 
+id_rear = 25
+rear_panel = Panel(matrix = matrixv2_0, id=id_rear, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
+rear_pmt = PMT(id=id_rear, panel=rear_panel, channelmap=chmap32) 
 conf_name = '3p1'
 Config_3p1_32x32 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, rear_panel],
                                pmts=[front_pmt, middle1_pmt, rear_pmt])
 tel_BR[conf_name] = Config_3p1_32x32
 tel_BR.panels = Config_3p1_32x32.panels
+tel_BR.pmts = Config_3p1_32x32.pmts
 
 #####COPAHUE 
 tel_name = 'COP'
 tel_COP = Telescope(name=tel_name)
 
-tel_COP.utm = np.array([310722.14, 5808130.41, 2543.]) 
-tel_COP.altitude = tel_COP.utm[-1]
+tel_COP.coordinates = np.array([310722.14, 5808130.41, 2543.]) 
 tel_COP.azimuth = 262.0#295
 tel_COP.zenith = 86.0#16
 tel_COP.elevation = round(90.0-tel_COP.zenith,1)#16
@@ -396,12 +418,12 @@ tel_COP.color = "grey"
 
 chmap32 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
 chmap16 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap32)
-front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
-middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap32)
-rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap32) 
+front_panel = Panel(matrix = matrixv2_0, id=0, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
+front_pmt = PMT(id=0, panel=front_panel, channelmap=chmap32) 
+middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
+middle1_pmt = PMT(id=1, panel=middle1_panel, channelmap=chmap16) 
+rear_panel = Panel(matrix = matrixv2_0, id=2, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
+rear_pmt = PMT(id=2, panel=rear_panel, channelmap=chmap32) 
 conf_name = '3p1'
 Config_3p1_32x32 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, rear_panel],
@@ -414,22 +436,21 @@ tel_COP.pmts = Config_3p1_32x32.pmts
 tel_name = 'OM'
 tel_OM = Telescope(name=tel_name)
 
-tel_OM.utm = np.array([642954.802937528, 1774560.94061667, 1344.6 + 1.5])
-tel_OM.altitude = tel_OM.utm[-1]
-tel_OM.azimuth = 192.0
-tel_OM.zenith = 76.1
+tel_OM.coordinates = np.array([642954.802937528, 1774560.94061667, 1344.6 + 1.5])
+tel_OM.azimuth = 192
+tel_OM.zenith = 76.6
 tel_OM.elevation = round(90.-tel_OM.zenith,1)
 tel_OM.site = "Fente du Nord - Soufrière"
 tel_OM.color = "orange"
 
 chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
 chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, ID=0, position=Position(PositionEnum.Front,0), channelmap=chmap32)
-front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
-middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, ID=2, position=Position(PositionEnum.Rear,1200), channelmap=chmap32)
-rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap32) 
+front_panel = Panel(matrix = matrixv2_0, id=0, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
+front_pmt = PMT(id=0, panel=front_panel, channelmap=chmap32) 
+middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
+middle1_pmt = PMT(id=1, panel=middle1_panel, channelmap=chmap16) 
+rear_panel = Panel(matrix = matrixv2_0, id=2, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
+rear_pmt = PMT(id=2, panel=rear_panel, channelmap=chmap32) 
 conf_name = '3p1'
 Config_3p1_32x32 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, rear_panel],
@@ -442,8 +463,7 @@ tel_OM.pmts = Config_3p1_32x32.pmts
 tel_name = 'SB'
 tel_SB = Telescope(name=tel_name)
 
-tel_SB.utm = np.array([642611.084416928, 1773797.5200942, 1185.])
-tel_SB.altitude = tel_SB.utm[-1]
+tel_SB.coordinates = np.array([642611.084416928, 1773797.5200942, 1185.])
 tel_SB.azimuth = 40.0#44.9
 tel_SB.zenith = 79.0#75
 tel_SB.elevation = round(90 - tel_SB.zenith ,1)
@@ -452,12 +472,12 @@ tel_SB.color = "blue"
 
 chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
 chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, ID=26, position=Position(PositionEnum.Front,0), channelmap=chmap32)
-front_pmt = PMT(ID=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=27, position=Position(PositionEnum.Middle1,600), channelmap=chmap16)
-middle1_pmt = PMT(ID=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, ID=28, position=Position(PositionEnum.Rear,1200), channelmap=chmap32)
-rear_pmt = PMT(ID=2, panel=rear_panel, channelmap=chmap32) 
+front_panel = Panel(matrix = matrixv2_0, id=26, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
+front_pmt = PMT(id=26, panel=front_panel, channelmap=chmap32) 
+middle1_panel = Panel(matrix = matrixv1_1, id=27, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
+middle1_pmt = PMT(id=27, panel=middle1_panel, channelmap=chmap16) 
+rear_panel = Panel(matrix = matrixv2_0, id=28, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
+rear_pmt = PMT(id=28, panel=rear_panel, channelmap=chmap32) 
 conf_name = '3p1'
 Config_3p1_32x32 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, rear_panel],
@@ -470,8 +490,7 @@ tel_SB.pmts = Config_3p1_32x32.pmts
 tel_name = 'SNJ'
 tel_SNJ = Telescope(name=tel_name)
 
-tel_SNJ.utm = np.array([642782.001377887, 1773682.54931093, 1143.])
-tel_SNJ.altitude = tel_SNJ.utm[-1]
+tel_SNJ.coordinates = np.array([642782.001377887, 1773682.54931093, 1143.])
 tel_SNJ.azimuth = 18.0#20.5#20
 tel_SNJ.zenith = 74.9#16
 tel_SNJ.elevation = round(90-tel_SNJ.zenith, 1)
@@ -479,14 +498,14 @@ tel_SNJ.site = "Parking - Soufrière"
 tel_SNJ.color = "yellow"
 
 channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, ID=9, position=Position(PositionEnum.Front,0), channelmap=channelmap)
-front_pmt = PMT(ID=9, panel=front_panel, channelmap=channelmap) 
-middle1_panel = Panel(matrix = matrixv1_1, ID=10, position=Position(PositionEnum.Middle1,600), channelmap=channelmap)
-middle1_pmt = PMT(ID=10, panel=middle1_panel, channelmap=channelmap) 
-middle2_panel = Panel(matrix = matrixv1_1, ID=11, position=Position(PositionEnum.Middle2,1200), channelmap=channelmap)
-middle2_pmt = PMT(ID=11, panel=middle2_panel, channelmap=channelmap) 
-rear_panel = Panel(matrix = matrixv1_1, ID=12, position=Position(PositionEnum.Rear,1800), channelmap=channelmap)
-rear_pmt = PMT(ID=12, panel=rear_panel, channelmap=channelmap) 
+front_panel = Panel(matrix = matrixv1_1, id=9, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
+front_pmt = PMT(id=9, panel=front_panel, channelmap=channelmap) 
+middle1_panel = Panel(matrix = matrixv1_1, id=10, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
+middle1_pmt = PMT(id=10, panel=middle1_panel, channelmap=channelmap) 
+middle2_panel = Panel(matrix = matrixv1_1, id=11, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
+middle2_pmt = PMT(id=11, panel=middle2_panel, channelmap=channelmap) 
+rear_panel = Panel(matrix = matrixv1_1, id=12, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
+rear_pmt = PMT(id=12, panel=rear_panel, channelmap=channelmap) 
 conf_name = '3p1'
 Config_3p1_16x16 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, middle2_panel],
@@ -509,22 +528,21 @@ tel_SNJ.pmts = Config_4p_16x16.pmts
 tel_name = 'SBR'
 tel_SBR = Telescope(name=tel_name)
 
-tel_SBR.utm = np.array([643345.81, 1774030.46,1267])
-tel_SBR.altitude = tel_BR.utm[-1]
-tel_SBR.azimuth = 297.0 #?
-tel_SBR.zenith = 80.0 #?
+tel_SBR.coordinates = np.array([643345.81, 1774030.46,1267])
+tel_SBR.azimuth = 297 #?
+tel_SBR.zenith = 80 #?
 tel_SBR.elevation = round(90.0-tel_BR.zenith, 1) #16
 tel_SBR.site = "Rocher Fendu - Soufrière"
 tel_SBR.color = "red"
 
 channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, ID=0, position=Position(PositionEnum.Front,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, ID=2, position=Position(PositionEnum.Middle1,600), channelmap=channelmap)
-front_middle1_pmt = PMT(ID=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
+front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
+middle1_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
+front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
 
-middle2_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle2,1200), channelmap=channelmap)
-rear_panel = Panel(matrix = matrixv1_1, ID=3, position=Position(PositionEnum.Rear,1800), channelmap=channelmap)
-middle2_rear_pmt = PMT(ID=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
+middle2_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
+rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
+middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
 conf_name = '3p1'
 Config_3p1_16x16 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, middle2_panel],
@@ -547,8 +565,7 @@ tel_SBR.pmts = Config_4p_16x16.pmts
 tel_name = 'SXF'
 tel_SXF = Telescope(name=tel_name)
 
-tel_SXF.utm = np.array([643109,1773943,1275.9]) #?
-tel_SXF.altitude = tel_BR.utm[-1]
+tel_SXF.coordinates = np.array([643109,1773943,1275.9]) #?
 tel_SXF.azimuth = 352.0 #?
 tel_SXF.zenith = 90-27 #?
 tel_SXF.elevation = round(90.0-tel_BR.zenith, 1) #16
@@ -556,13 +573,13 @@ tel_SXF.site = "Faille du 30 Août - Soufrière"
 tel_SXF.color = "purple"
 
 channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, ID=0, position=Position(PositionEnum.Front,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, ID=2, position=Position(PositionEnum.Middle1,600), channelmap=channelmap)
-front_middle1_pmt = PMT(ID=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
+front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
+middle1_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
+front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
 
-middle2_panel = Panel(matrix = matrixv1_1, ID=1, position=Position(PositionEnum.Middle2,1200), channelmap=channelmap)
-rear_panel = Panel(matrix = matrixv1_1, ID=3, position=Position(PositionEnum.Rear,1800), channelmap=channelmap)
-middle2_rear_pmt = PMT(ID=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
+middle2_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
+rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
+middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
 conf_name = '3p1'
 Config_3p1_16x16 = PanelConfig(name = conf_name, 
                                panels=[front_panel, middle1_panel, middle2_panel],
@@ -589,7 +606,6 @@ def str2telescope(v):
    
     if isinstance(v, Telescope):
        return v
-
     if v in list(DICT_TEL.keys()):
         return DICT_TEL[v]
     elif v in [f"tel_{k}" for k in list(DICT_TEL.keys()) ]:
@@ -603,7 +619,7 @@ def str2telescope(v):
 
 
 if __name__ == '__main__':
-    print(tel_SNJ)
+    print(tel_SNJ.pmts[0].channelmap)
 
 
 

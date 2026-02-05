@@ -1,93 +1,107 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
-
+from argparse import ArgumentTypeError
 import numpy as np
 from pathlib import Path
-from typing import List, Union
-import glob
+from typing import Union
+import yaml
 
 #package module(s)
-from config import MAIN_PATH, SURVEY_DIR, LIST_AVAIL_SURVEY, CURRENT_SURVEY_NAME
-from .run import RunType, RunSurvey
 from telescope import DICT_TEL
+from .run import Run, RunTomo, RunCalib
 
+fyaml = Path(__file__).parent / "survey.yaml"
+with open( fyaml ) as f: #same
+    try:
+        survey_yaml = yaml.load(f, Loader=yaml.SafeLoader) # The FullLoader parameter handles the conversion from YAML scalar values to Python the dictionary format
+    except yaml.YAMLError as exc:
+        print(exc)
 
+LIST_AVAIL_SURVEY = list(survey_yaml.keys())
+DICT_SURVEY = {}
+    
 class Survey: 
    
     def __init__(self, name:str=None, path:Union[str, Path]=None):
         self.name = name
-        self.path = path
-        self.runs = {}
-        self.telescopes = {}
-        self.dem_file = Union[Path, str]
-        self.surface_grid = np.ndarray #shape : (m, n, 3)
-
-    def __setitem__(self, name:str, run:RunSurvey): 
-        self.runs[name] = run
-        self.telescopes[name] = run.telescope
-
-    def __getitem__(self,name:str): 
-        run = self.runs[name]
-        return run
+        self.dem = Union[Path, str] #path to dem file
+        self.telescope = {} #tel: Telescope object
+        self.runs = {} #tel: path to data runsfiles
+        self.flux = {} #tel: path to expected flux files
+        self.raypath = {} #tel: path to raypath files
+        self.surface_grid = np.ndarray #shape : (3, m, n)
+        self.surface_center = None
 
     def __str__(self): 
         sout = f"\nSurvey: {self.name}\n\n - "+ f"\n - ".join(v.__str__() for _,v in self.runs.items())
         return sout
 
-    def set_surface_grid(self, grid:np.ndarray, xy_center:np.ndarray=None): 
+    def set_surface_grid(self): 
         """_summary_
-
-        Args:
-            grid (np.ndarray): surface grid shape (3, m, n)
-            xy_center (np.ndarray): (2,)
         """
-        self.surface_grid = grid 
+        s = self.dem
+        if isinstance(s,str): s=Path(s) 
+        if s.suffix == ".npy": grid = np.load(s)  #grid (np.ndarray): surface grid shape (3, m, n)
+        elif s.suffix ==".txt": grid = np.loadtxt(s)
+        else: raise ValueError("Surface grid failed")
+        shp = grid.shape
+        if shp[0]==3: grid=grid.T
+        mx, my = shp[0]//2, shp[1]//2
+        center_xy = np.array([grid[mx, my, 0], grid[my, mx, 1]])
+        self.surface_center = center_xy
+        self.surface_grid = grid
 
-        if xy_center is None: 
-            s = grid.shape
-            mx, my = s[0]//2, s[1]//2
-            xy_center = np.array([grid[0, mx, my], grid[1, my, mx]])
+def get_runs(content:dict):
+    """"
+    Get available data runs in 'content' dict
+    """
+    runs = {}
+    for k, v in content.items():
+        r = None
+        if "tomo" in k: r= RunTomo(name=k, path=v ) 
+        elif "cal" in k: r= RunCalib(name=k, path=v ) 
+        else : r= Run(name=k, path=v ) 
+        runs[k] = r
+    return runs
 
-        self.surface_center = xy_center
+def set_survey(name:str):
+    survey = Survey()
+    if not name in LIST_AVAIL_SURVEY: 
+        print(f"{name} survey not in 'survey.yaml'")
+        return None
+    f = Path(survey_yaml[name]["dem"])
+    if f.exists():
+        survey.dem = f 
+        survey.set_surface_grid()
+        DICT_SURVEY[name] = survey
+    else: 
+        print(f"DEM file not available for {name} survey.")
+    ltel = survey_yaml[name]["telescope"]
+    for k,v in ltel.items(): 
+        if k in DICT_TEL: survey.telescope[k] = DICT_TEL[k] 
+        else: print(f"Tel {k} not in DICT_TEL")
+        runs = get_runs(v["run"])
+        survey.runs[k] = runs
+        if v["flux"] is not None : survey.flux[k] = v["flux"] 
+        if v["raypath"] is not None : survey.raypath[k] = v["raypath"] 
+    return survey
 
-DICT_TELNAME_SURVEY = {sur : [t.split('/')[-1] for t in  glob.glob( str(SURVEY_DIR / sur / 'telescope') + '/**' ) ]  
-                       for sur in LIST_AVAIL_SURVEY}
+def str2survey(v):
+    if isinstance(v, Survey):
+       return v
+    if v in list(DICT_SURVEY.keys()):
+        return DICT_SURVEY[v]
+    elif v in [f"sur_{k}" for k in list(DICT_SURVEY.keys()) ]:
+        return DICT_SURVEY[v[4:]]
+    elif v in [ k.lower() for k in list(DICT_SURVEY.keys())]:
+        return DICT_SURVEY[v.upper()]
+    elif v in [f"survey_{k.lower()}" for k in list(DICT_SURVEY.keys()) ]:
+        return DICT_SURVEY[v[4:].upper()]
+    else:
+        raise ArgumentTypeError('Input survey does not exist.')
 
-DICT_SURVEY = {sur_name : Survey() for sur_name in LIST_AVAIL_SURVEY}
-
-
-
-for sur_name, ltel_name  in DICT_TELNAME_SURVEY.items() : 
-    
-    for tel_name in ltel_name:
-        tel = DICT_TEL[tel_name]
-        survey_path =  SURVEY_DIR / sur_name
-        DICT_SURVEY[sur_name].path = survey_path
-        fyaml = survey_path / "telescope" / tel_name / "run.yaml"
-        kwargs = {'telescope' : tel, 'file_yaml' : fyaml}
-        run_survey = RunSurvey(**kwargs) 
-        run_survey.get_runs([RunType.calib, RunType.tomo])
-        DICT_SURVEY[sur_name][tel_name] = run_survey
-
-souf_survey = DICT_SURVEY['soufriere']
-dem_path = souf_survey.path / "dem"
-filename_grid = "soufriereStructure_2.npy" #res 5m
-souf_survey.dem_file = dem_path / filename_grid
-souf_grid = np.load(dem_path / filename_grid)
-souf_xy_center = np.loadtxt(dem_path / "volcanoCenter.txt").T
-souf_survey.set_surface_grid(grid = souf_grid, xy_center = souf_xy_center)
-
-
-cop_survey = DICT_SURVEY['copahue']
-dem_path = cop_survey.path / "dem"
-filename_grid = "copahueStructure.npy" #res 1m
-cop_survey.dem_file = dem_path / filename_grid
-cop_grid = np.load(dem_path / filename_grid)
-cop_survey.set_surface_grid(grid = cop_grid)
-
-CURRENT_SURVEY = DICT_SURVEY[CURRENT_SURVEY_NAME]
+current_survey_name = "soufriere"
+CURRENT_SURVEY = set_survey(current_survey_name)
 
 if __name__=="__main__":
     pass
-    
-    

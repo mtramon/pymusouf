@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from argparse import ArgumentError
-import numpy as np
+import argparse
+from datetime import datetime
+import glob
+import gzip
+import json
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import SubplotSpec
 from mpl_toolkits.mplot3d import axes3d
-import sys
+import numpy as np
 import os
-import gzip
+import pandas as pd
+from pathlib import Path
+import sys
 from scipy.interpolate import griddata
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
-import glob
-import pandas as pd
-import argparse
-import json
+
+def get_file_datetime(file:Path|str):
+    if isinstance(file, str): file=Path(file)
+    dt = datetime.fromtimestamp(file.stat().st_mtime)
+    return dt
+
+def print_file_datetime(file:Path|str): print(f"Load {file} -- {get_file_datetime(file)}")
 
 
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
@@ -39,14 +47,12 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
         sys.stdout.write('\n')
     sys.stdout.flush()
     
-
 def my_import(name):
     components = name.split('.')
     mod = __import__(components[0])
     for comp in components[1:]:
         mod = getattr(mod, comp)
     return mod
-
 
 def create_subtitle(fig: plt.Figure, grid: SubplotSpec, title: str):
     "Sign sets of subp with title"
@@ -72,7 +78,7 @@ def merge_files(recodir:str, filename:str, type:str, ext:str, prefix:str="out")-
         df.to_csv(outfile,  sep='\t') #index=False,
     elif ext=='json.gz': 
         merge_dict(files=chunck_files, outfile=outfile, compression=True)            
-    else: raise ArgumentError("Unknown file ext (need to modify the merge_files() function).")
+    else: raise argparse.ArgumentError("Unknown file ext (need to modify the merge_files() function).")
     
     return outfile
 

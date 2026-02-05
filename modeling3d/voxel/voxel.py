@@ -1,23 +1,28 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
 
-import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
-from mpl_toolkits.mplot3d.axes3d import Axes3D
 from matplotlib.colors import Normalize
-from scipy.interpolate import griddata,LinearNDInterpolator
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.axes3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import numpy as np
+import os
+from pathlib import Path
+import pickle
+from scipy.interpolate import griddata,LinearNDInterpolator
 from scipy.integrate import dblquad, nquad
 import time
+from tqdm import tqdm
 from typing import Union
-import os
-import pickle
+from vtk.util import numpy_support
+
 #personal package(s)
-from telescope import Telescope, DICT_TEL, str2telescope
+from cli import get_common_args
 from raypath import RayPath
 from survey import CURRENT_SURVEY
+from telescope import Telescope, DICT_TEL, str2telescope
+from utils.common import Common
 
 params = {'legend.fontsize': 'xx-large',
          'axes.labelsize': 'xx-large',
@@ -40,7 +45,7 @@ class DirectProblem:
     def __init__(self, telescope:Telescope, vox_matrix:np.ndarray, res_vox:int=64) -> None:
         self.tel = telescope
         self.vox_matrix = vox_matrix
-        self.tx, self.ty, self.tz = self.tel.utm
+        self.tx, self.ty, self.tz = self.tel.coordinates
         self.taz, self.tze = self.tel.azimuth*np.pi/180, self.tel.zenith*np.pi/180
         self.res_vox = res_vox
         
@@ -57,7 +62,7 @@ class DirectProblem:
                 panels = conf.panels
                 front_panel, rear_panel = panels[0], panels[-1]
                 self.tl = abs(front_panel.position.z  - rear_panel.position.z) * 1e-3 #mm->m
-                self.tazM, self.tzeM = self.tel.azimuthMatrix[key], self.tel.zenithMatrix[key]
+                self.tazM, self.tzeM = self.tel.azimuth_matrix[key], self.tel.zenith_matrix[key]
                 print(f"Compute voxel ray matrix for {self.tel.name} ({key})...")
                 thick_mat = raypath[key]['thickness']
                 self.voxray[key] = self.build(thickness=thick_mat)
@@ -69,9 +74,6 @@ class DirectProblem:
             with open(pkl_file, 'rb') as f : 
                 self.voxray = pickle.load(f)
                
-
-
-
     def computexyzIntersections(self, xb:np.ndarray, yb:np.ndarray, zb:np.ndarray):
         '''
         Returns the ...
@@ -129,17 +131,15 @@ class DirectProblem:
         nvox = self.vox_matrix.shape[0]
         ndx, ndy = self.tazM.shape
         voxrayMatrix = np.zeros(shape=(ndx*ndy,nvox))*np.nan
-
         MNorm = np.zeros(shape=(ndx, ndy))
-        nbarsx, nbarsy = self.tel.panels[0].matrix.nbarsX, self.tel.panels[0].matrix.nbarsY
+        nbarsx, nbarsy = self.tel.panels[0].matrix.nbars_x, self.tel.panels[0].matrix.nbars_y
         wx = self.tel.panels[0].matrix.scintillator.width #in mm width scintillators
         wy = wx
-        for ii in range(ndx): # loop on DX    
+        for ii in tqdm(range(ndx), desc="DirectProblem.build()"): # loop on DX    
             DX = (ii+1)-nbarsx    
-            print(f'\t\t\t line {ii+1} / {ndx} \n')
+            # print(f'\t\t\t line {ii+1} / {ndx} \n')
             for jj in range(ndy):  # loop on DY        
                 DY = (jj+1)-nbarsy
-                
                 apparentThicknessRay = apparentThicknessMatrix[ii,jj]
                 za = self.tzeM[ii,jj]*180/np.pi
                 if (apparentThicknessRay > 0) & (~np.isnan(apparentThicknessRay)) & (np.isfinite(apparentThicknessRay)) & (apparentThicknessRay < 1000) & (za <= 90):
@@ -173,7 +173,6 @@ class DirectProblem:
                     sv_inThisRay = np.where(((abs(txIntersection/(wy*1e-3)+DY) <= 4) & (abs(tzIntersection/(wx*1e-3)+DX) <= 4) & (tIntersection > 0)) | (distancesFromTelescope < 100) ) [0]
                     iteration = 5 # hypersample the cube (2**iteration)
                     NsubCubes = (2**iteration)**3
-
                     for kk in range(len(sv_inThisRay)):
                         x_sub_bary = np.linspace(-res/2,res/2,2**(iteration+1) + 1) 
                         x_sub_bary = x_sub_bary[1:-1:2]
@@ -197,7 +196,6 @@ class DirectProblem:
                             thisCubeContribution = 0
                         tomographyKernel[sv_inThisRay[kk]] = thisCubeContribution
                     voxrayMatrix[ii*ndx + jj,:] = tomographyKernel/(normFactor*25)
-        
         return voxrayMatrix    
 
 
@@ -208,9 +206,9 @@ class Voxel:
 
     Attributes
     ----------
-    surface_grid : np.ndarray (X, Y, Z) with shape (3, m, n) [meter]
+    surface_grid : np.ndarray with shape (m, n, 3) [meter]
 
-    surface_center : np.ndarray (x, y) with shape (2,) [meter]
+    surface_center : np.ndarray with shape (2,) [meter]
 
     res_vox : int [meter]
     
@@ -228,7 +226,7 @@ class Voxel:
 
     getVoxelDistances()
 
-    getVolumeRegion()
+    getVolumeTotal()
 
     plot3Dmesh()
     ...
@@ -237,28 +235,36 @@ class Voxel:
 
     def __init__(self, surface_grid:np.ndarray, surface_center:np.ndarray, res_vox:int=64):
         
-        self.SX, self.SY, self.SZ = surface_grid 
+        self.SX, self.SY, self.SZ = surface_grid.T
         self.sc = surface_center
         self.res_vox = res_vox
+        self.xmin, self.xmax = np.min(self.SX[:,0]), np.max(self.SX[:,0])
+        self.ymin, self.ymax = np.min(self.SY[0,:]), np.max(self.SY[0,:])
+        self.zmin, self.zmax = np.min(self.SZ), np.max(self.SZ)
+
+        self.SX, self.SY, self.SZ = self.generateTopography(res_vox) 
+        self.vox_matrix = None
+        self.vox_xyz = None
+        self.vox_distances = None
+        self.vox_volumes = None
 
 
-    def generateTopography(self, res:int=64, side_length:int=1664) -> np.ndarray:
+    def generateTopography(self, res:int=64, ) -> np.ndarray:
         '''
             Parameters:
                     res (int): topography resolution in meter
-                    side_length (int): terrain side length in meter
             Returns:
                     X, Y, Z (np.ndarray): coordinate grid matrices
-        '''
+        ''' 
 
-        X, Y = np.meshgrid(np.arange(-side_length/2, side_length/2+res, res), np.arange(-side_length/2,side_length/2+res, res))                                          
-        X, Y = X + self.sc[0], Y + self.sc[1]
+        X, Y = np.meshgrid(np.arange(self.xmin, self.xmax, res), np.arange(self.ymin,self.ymax, res))                                          
+        # X, Y = X + self.sc[0], Y + self.sc[1]
         points, values = np.array([self.SX.flatten(), self.SY.flatten()]).T, self.SZ.flatten()
         Z = griddata(points, values, (X,Y), method='linear' )
         return X, Y, Z
-    
 
-    def plotTopography(self, ax:Axes, mask:np.ndarray=None, res:int=64, side_length:int=1664,  **kwargs) -> None:
+
+    def plotTopography(self, ax:Axes, mask:np.ndarray=None, res:int=64,  **kwargs) -> None:
         '''
         Returns the ...
 
@@ -270,75 +276,78 @@ class Voxel:
                     res (?): ...
         '''
        
-        SX, SY, SZ = self.generateTopography(res, side_length) 
-        if mask is not None: SZ[mask] = np.nan
-        ax.plot_surface(SX,SY,SZ,**kwargs)
+        if mask is not None: self.SZ[mask] = np.nan
+        ax.plot_surface(self.SX,self.SY,self.SZ,**kwargs)
 
 
-    def generateMesh(self, side_length:int = 1664) -> None:
+    def generateMesh(self) -> None:
         '''
         Adapted from Marina Rosas-Carbajal's MatLab function
-
-            Parameters:
-                    side_length (int): ...
-            Returns:
-                    None
         '''
         
         res = self.res_vox
-        SX, SY, SZ = self.generateTopography(res, side_length) 
-        altitudeMin = np.nanmin(np.nanmin(SZ)) - 2*res
-        altitudeMax = np.nanmax(np.nanmax(SZ)) + 2*res
-        Nx,Ny = SX.shape
-        Nz = int(np.round(np.floor((altitudeMax-altitudeMin)/res) +1, 0))
+        altitudeMin = self.zmin
+        altitudeMax = self.zmax
+        Nx,Ny = self.SX.shape
+        Nz = int((altitudeMax-altitudeMin)//res) 
         altitudeVector = np.arange(altitudeMin, altitudeMax+res, res)
-        vox_matrix = np.zeros(shape=(int((Nx-1)*(Ny-1)*(Nz-1)),  1 + 6*4 + 3 + 3))
-        
+        nvoxels=int((Nx-1)*(Ny-1)*(Nz-1))
+        vox_matrix = np.zeros(shape=(nvoxels,  1 + 6*4 + 3 + 3))
+        status = 0
+        points, values = (self.SX.ravel(),self.SY.ravel()), self.SZ.ravel()
+        topo_interp = LinearNDInterpolator(points, values)  
+        volumes = np.zeros((nvoxels,2))
         for ii in range(Nx-1):
             
             for jj in range(Ny-1):
                
                 rep = 0
-                z_surface = np.array([SZ[ii,jj], SZ[ii,jj+1], SZ[ii+1,jj+1], SZ[ii+1,jj]])
+                z_surface = np.array([self.SZ[ii,jj], self.SZ[ii,jj+1], self.SZ[ii+1,jj+1], self.SZ[ii+1,jj]])
                 z_surface_min = np.min(z_surface)
                 z_surface_max = np.max(z_surface)
                 
                 for kk in range(Nz-1):
                     if rep == 1 :# once we satisfy this condition we don't need to continue inside this loop
                         break
-                    
-                    x_down = np.array([SX[ii,jj], SX[ii,jj+1], SX[ii+1,jj+1], SX[ii+1,jj]])
-                    x_up = np.array([SX[ii,jj], SX[ii,jj+1], SX[ii+1,jj+1], SX[ii+1,jj]])
-                    y_down = np.array([SY[ii,jj], SY[ii,jj+1], SY[ii+1,jj+1], SY[ii+1,jj]])
-                    y_up = np.array([SY[ii,jj], SY[ii,jj+1], SY[ii+1,jj+1], SY[ii+1,jj]])
+                    x_down = np.array([self.SX[ii,jj], self.SX[ii,jj+1], self.SX[ii+1,jj+1], self.SX[ii+1,jj]])
+                    x_up = np.array([self.SX[ii,jj], self.SX[ii,jj+1], self.SX[ii+1,jj+1], self.SX[ii+1,jj]])
+                    y_down = np.array([self.SY[ii,jj], self.SY[ii,jj+1], self.SY[ii+1,jj+1], self.SY[ii+1,jj]])
+                    y_up = np.array([self.SY[ii,jj], self.SY[ii,jj+1], self.SY[ii+1,jj+1], self.SY[ii+1,jj]])
                     z_d, z_u = altitudeVector[kk] , altitudeVector[kk+1]
                     z_down = np.ones(4)*z_d
                     z_up = np.ones(4)*z_u
-                    
+                    v = 0 
                     # 1 : interface inf, 2 : interface sup, 3 : in between (weird), 4 : below interface, 5 : above interface
                     if (z_surface_min <= z_u) and (z_d < z_surface_min):
                         z_up = z_surface  # topography's coordinates
                         status = 1 # below surface
                         rep = 1  
-                        
                     elif (z_u < z_surface_max) and (z_d > z_surface_min) : # cube in the middle, not taken into account
                         status = 2 # in the middle
-                    elif (z_u > z_surface_max) and (z_d < z_surface_max) : 
+                    elif (z_u > z_surface_max) and (z_d < z_surface_max) : # cube in the middle, not taken into account
                         z_down = z_surface
                         status = 3 # in the middle
-                    elif (z_u < z_surface_min) :
+                    elif (z_u < z_surface_min) : 
                         status = 4 # below surface
-                    elif (z_d > z_surface_max) :
+                    elif (z_d > z_surface_max) : # cube above surface, not taken into account
                         status = 5 # above surface
                     
                     xyz_vox = np.vstack((np.vstack((x_down,y_down,z_down)).T, np.vstack((x_up,y_up,z_up)).T ))
                     self.barycenters = np.mean(xyz_vox, axis=0)
-                    q = ii*(Ny-1)*(Nz-1) + jj*(Nz-1) + kk
-                    vox_matrix[q,:] = np.concatenate(([status], x_down, x_up, y_down, y_up, z_down, z_up, self.barycenters,[ii, jj, kk]), axis=0)
+                    voxel =  np.concatenate(([status], x_down, x_up, y_down, y_up, z_down, z_up, self.barycenters,[ii, jj, kk]), axis=0)
+                    ix_vox = ii*(Ny-1)*(Nz-1) + jj*(Nz-1) + kk
+                    vox_matrix[ix_vox,:] = voxel
+                    volume_estimate = np.zeros(2)
+                    if status == 1:
+                        volume_estimate = self.getVolumeVoxel(voxel, topo_interp) #(val,err)
+                    elif status == 4 : 
+                        volume_estimate[0] = self.res_vox**3
+                    volumes[ix_vox] = volume_estimate
         
         status = vox_matrix[:,0]
         sv = (status == 1) | (status == 4)
         self.vox_matrix = vox_matrix[sv,:]
+        self.vox_volumes = volumes[sv,:]
 
     
     def getVoxels(self) -> None:
@@ -354,7 +363,6 @@ class Voxel:
             [  [x[:,0], y[:,3], z[:,0]], [x[:,0], y[:,3], z[:,7]],[x[:,1], y[:,3], z[:,6]], [x[:,1], y[:,3], z[:,0]] ],
             [  [x[:,0], y[:,3], z[:,7]], [x[:,0], y[:,0], z[:,4]],[x[:,1], y[:,0], z[:,5]], [x[:,1], y[:,3], z[:,6]] ]
         ] ) 
-        
         self.vox_xyz = np.swapaxes(self.vox_xyz.T,1,-1)
 
 
@@ -375,10 +383,16 @@ class Voxel:
             [  [x[:,0], y[:,3], z[:,0]], [x[:,0], y[:,3], z[:,7]],[x[:,1], y[:,3], z[:,6]], [x[:,1], y[:,3], z[:,0]] ],
             [  [x[:,0], y[:,3], z[:,7]], [x[:,0], y[:,0], z[:,4]],[x[:,1], y[:,0], z[:,5]], [x[:,1], y[:,3], z[:,6]] ]
         ] ) 
-        
         voxels = np.swapaxes(voxels.T,1,-1)
-        
         return voxels
+
+    def getVolumeVoxel(self, voxel, topo):
+        x_min, x_max = np.min(voxel[1:4]), np.max(voxel[1:4]) 
+        y_min, y_max = np.min(voxel[9:12]), np.max(voxel[9:12])
+        z_min = voxel[17]
+        f_zc = lambda xc,yc :  (topo((xc, yc)) - z_min)
+        vol, err = dblquad(f_zc, y_min, y_max, x_min, x_max,)
+        return np.asarray([vol, err])
 
 
     def getVoxelDistances(self)-> None:
@@ -391,21 +405,16 @@ class Voxel:
             for i in range(nvox):
                 self.vox_distances[i,j] = np.linalg.norm(self.barycenters[i]-self.barycenters[j]) 
 
-
-    def getVolumeRegion(self, sv_vox:np.ndarray, side_length:int = 1664) -> np.ndarray:
+    def getVolumeTotal(self, sv_vox:np.ndarray) -> float:
         '''
         '''
         M = self.vox_matrix
-
         sv_surface = np.where(M[sv_vox,0]==1)[0]
         sv_not_surface = np.where(M[sv_vox,0]==4)[0]
-
-        volume = self.res_vox**3 * len(sv_not_surface) 
-       
-        SX,SY,SZ = self.generateTopography(self.res_vox, side_length) 
+        vol_tot = self.res_vox**3 * len(sv_not_surface) 
+        SX,SY,SZ = self.generateTopography(self.res_vox) 
         points, values = (SX.flatten(),SY.flatten()), SZ.flatten()
         finterp = LinearNDInterpolator(points, values)        
-        
         for s in sv_surface:
             ivox = sv_vox[s]
             x_min, x_max = np.min(M[ivox,1:4]), np.max(M[ivox,1:4]) 
@@ -413,10 +422,8 @@ class Voxel:
             z_min = M[ivox,17]
             f_zc = lambda xc,yc :  (finterp((xc, yc)) - z_min)
             dv =  dblquad(f_zc,  y_min, y_max, x_min, x_max,)
-            volume += dv[0]
-            
-        return volume
-
+            vol_tot += dv[0]
+        return vol_tot
 
     def plot3Dmesh(self, ax:Axes3D, vox_xyz:np.ndarray=None, **kwargs) -> None:
         '''
@@ -426,75 +433,128 @@ class Voxel:
         Returns: 
             None
         '''
-
         if vox_xyz is None: 
             vox_xyz = self.vox_xyz
             if self.vox_xyz is None: self.getVoxels()
-
         pc = Poly3DCollection(np.concatenate(vox_xyz), **kwargs)
         ax.add_collection3d(pc)
 
+    def convertToVTU(self, file:Path|str):
+        import vtk
+        points = vtk.vtkPoints()
+        ugrid = vtk.vtkUnstructuredGrid()
 
-    
+        point_id_map = {}
+        current_point_id = 0
+        nvoxels, nfaces, ncorners, ncoords = self.vox_xyz.shape
+        for v in range(nvoxels):
+            # Récupération des 24 sommets
+            coords = self.vox_xyz[v].reshape(-1, 3)
+            # Sommets uniques
+            unique_pts = np.unique(coords, axis=0)
+            if unique_pts.shape[0] != 8:
+                raise ValueError("Voxel non hexaédrique")
+            # Tri spatial pour imposer l’ordre VTK
+            center = unique_pts.mean(axis=0)
+            rel = unique_pts - center
+            # z puis y puis x → ordre stable
+            order = np.lexsort((rel[:,0], rel[:,1], rel[:,2]))
+            ordered_pts = unique_pts[order]
+            hex_cell = vtk.vtkHexahedron()
+            for i, p in enumerate(ordered_pts):
+                key = tuple(p)
+                if key not in point_id_map:
+                    points.InsertNextPoint(p)
+                    point_id_map[key] = current_point_id
+                    current_point_id += 1
+                hex_cell.GetPointIds().SetId(i, point_id_map[key])
+            ugrid.InsertNextCell(hex_cell.GetCellType(),
+                                hex_cell.GetPointIds())
+
+        ugrid.SetPoints(points)
+        if self.vox_volumes is not None: 
+            vol_arr = numpy_support.numpy_to_vtk(
+                np.array(self.vox_volumes),
+                deep=True,
+                array_type=vtk.VTK_DOUBLE
+            )
+            vol_arr.SetName("voxel_volume")
+            ugrid.GetCellData().AddArray(vol_arr)
+            ugrid.GetCellData().SetActiveScalars("voxel_volume")
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(file)
+        print(f'Save {file}')
+        writer.SetInputData(ugrid)
+        writer.Write()
+
 
 if __name__ == "__main__":
     
     t0 = time.time()
     print("Start: ", time.strftime("%H:%M:%S", time.localtime()))#start time
 
+    args = get_common_args()
+    cmn = Common(args)
 
-    survey = CURRENT_SURVEY
-    survey_path = survey.path
+    survey = cmn.survey
+    tel = cmn.telescope
 
     res_vox = 64 #m
+    c = np.array([642960, 1774280])
     voxel = Voxel(    surface_grid=survey.surface_grid,
-                      surface_center=survey.surface_center, 
+                      surface_center=c,#survey.surface_center, 
                       res_vox=res_vox)
-    
-    tel = DICT_TEL['SNJ']
+
     conf='3p1'
     front, rear = tel.configurations[conf].panels[0], tel.configurations[conf].panels[-1]
     
-    dem_path = survey_path / 'dem'
+    dem_path = survey.dem.parent
+    survey_path = dem_path.parent
     tel_files_path = survey_path / 'telescope'  / tel.name
 
     dout_vox_struct = survey_path / "voxel"
     dout_vox_struct.mkdir(parents=True, exist_ok=True)
     fout_vox_struct = dout_vox_struct / f"vox_matrix_res{res_vox}m.npy"
-    
     # if fout_vox_struct.exists(): 
     #     vox_matrix = np.load(fout_vox_struct)
     #     voxel.vox_matrix = vox_matrix
     # else : 
     voxel.generateMesh()
-    np.save(fout_vox_struct, voxel.vox_matrix)
-    print(f"generateMesh() end --- {time.time() - t0:.3f} s")
+    print(f"generateMesh() --- {time.time() - t0:.3f} s")
+    voxel.getVoxels()
+    np.save(fout_vox_struct, voxel.vox_xyz)
+    print(f"Save {fout_vox_struct}")
+    output_file = dout_vox_struct / f"vox_matrix_res{res_vox}m.vtu"
+    voxel.convertToVTU(output_file)
+    # output_file = dout_vox_struct / f"volumes_res{res_vox}m.npy"
+    # np.save(output_file, voxel.vox_volumes)
+    # print(f"Save {output_file}")
 
-    print(voxel.vox_matrix.shape)
-    raypath = RayPath(telescope=tel,
-                        surface_grid=survey.surface_grid,
-                        )
+
+
+
+
+
+    # raypath = RayPath(telescope=tel,
+    #                     surface_grid=survey.surface_grid,
+    #                     )
+    # dout_ray = tel_files_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' 
+    # raypath(file=dout_ray / 'raypath', max_range=1500)
+    # thickness = raypath.raypath[conf]['thickness']
+    # fout_cmd = dout_ray / "voxel" / f"voxray_{conf}_res{res_vox}m.npy"
+    # fout_cmd.parents[0].mkdir(parents=True, exist_ok=True)
+    # dirpb = DirectProblem(telescope=tel, 
+    #                       vox_matrix=voxel.vox_matrix, 
+    #                       res_vox=res_vox)
+
+    # fout_voxray = dout_ray / "voxel" / f"voxray_res{res_vox}m"
+    # fout_voxray.parent.mkdir(parents=True, exist_ok=True)
+    # dirpb(file=fout_voxray, raypath=raypath.raypath)
+    # voxrayMatrix = dirpb.voxray[conf]
+    # print(f"voxrayMatrix.shape = {voxrayMatrix.shape}")
     
 
-    dout_ray = tel_files_path / 'raypath'/ f'az{tel.azimuth:.1f}_elev{tel.elevation:.1f}' 
 
-    raypath(file=dout_ray / 'raypath', max_range=1500)
-
-    thickness = raypath.raypath[conf]['thickness']
-
-    fout_cmd = dout_ray / "voxel" / f"voxray_{conf}_res{res_vox}m.npy"
-    fout_cmd.parents[0].mkdir(parents=True, exist_ok=True)
-   
-    dirpb = DirectProblem(telescope=tel, 
-                          vox_matrix=voxel.vox_matrix, 
-                          res_vox=res_vox)
-
-    fout_voxray = dout_ray / "voxel" / f"voxray_res{res_vox}m"
-    fout_voxray.parent.mkdir(parents=True, exist_ok=True)
-    dirpb(file=fout_voxray, raypath=raypath.raypath)
-    voxrayMatrix = dirpb.voxray[conf]
-    print(f"voxrayMatrix.shape = {voxrayMatrix.shape}")
-   
     ###PLOTS
 
     import palettable
@@ -508,7 +568,6 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(12,8))
     ax = fig.add_subplot(111, projection='3d')
     kwargs_mesh = dict(facecolor = color_vox, edgecolor = "grey", alpha = 0.3)
-    voxel.getVoxels()
     voxel.plot3Dmesh(ax=ax, vox_xyz=voxel.vox_xyz, **kwargs_mesh)
     kwargs_topo = dict (color = 'lightgrey', edgecolor = 'grey', alpha = 0.2)
     voxel.plotTopography(ax, **kwargs_topo)
@@ -531,21 +590,18 @@ if __name__ == "__main__":
     ax.set_ylabel("Y [m]")
     ltel_n = ["SB", "SNJ", "BR", "OM"]
     str_tel =  "_".join(ltel_n)
-    ltel_coord = np.array([ str2telescope(name).utm for name in ltel_n])
+    ltel_coord = np.array([ str2telescope(name).coordinates for name in ltel_n])
     ltel_color = np.array([ str2telescope(name).color for name in ltel_n])
     ax.scatter(ltel_coord[:,0], ltel_coord[:,1], ltel_coord[:,-1], c=ltel_color, s=30,marker='s',)
-    mask = np.isnan(thickness).flatten()
-    tel.plot_ray_paths(ax=ax, front_panel=front, rear_panel=rear, mask=mask, rmax=1500,  color='grey', linewidth=0.3 )#
+    # mask = np.isnan(thickness).flatten()
+    # tel.plot_ray_paths(ax=ax, front_panel=front, rear_panel=rear, mask=mask, rmax=1500,  color='grey', linewidth=0.3 )#
     plt.show()
 
-
     ###Compute volume
-
     # voxrayMatrix[np.isnan(voxrayMatrix)] = 0
     # mvox = np.any(voxrayMatrix>0, axis=0)
     # sv_vox = np.where(mvox==True)[0]
-    # vol = voxel.getVolumeRegion(sv_vox=sv_vox)
+    # vol = voxel.getVolumeTotal(sv_vox=sv_vox)
     # print(f"Volume covered by {tel.name} ({conf}) : {vol:.5e} m^3")
-
 
     print(f"End --- {time.time() - t0:.3f} s")

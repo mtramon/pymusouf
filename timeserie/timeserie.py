@@ -214,7 +214,7 @@ if __name__ == "__main__":
 
     tel = dict_tel['BR']
     ####default arguments/paths are written in a yaml config file associated to telescope
-    main_path = Path(__file__).parents[1]#MAIN_PATH# #
+    main_path = Path(__file__).parents[1]
     print(f"main_path: {main_path}")
     with open( str(main_path / "files" / "telescopes" / tel.name /"run.yaml") ) as fyaml:
         try: def_args = yaml.load(fyaml, Loader=yaml.SafeLoader)
@@ -313,7 +313,7 @@ if __name__ == "__main__":
         ray_matrix = tel.get_ray_matrix(front, rear)
 
         #grid_x, grid_y =  ray_matrix[:,:,0], ray_matrix[:,:,1]
-        grid_x, grid_y = tel.azimuthMatrix[key], tel.zenithMatrix[key]
+        grid_x, grid_y = tel.azimuth_matrix[key], tel.zenith_matrix[key]
         grid_z = ts.estimate_serie['estimate'][key]
         nn = grid_z[0] != 0
         vmin, vmax = np.nanmin(grid_z[0][nn]), np.nanmax(grid_z[0])

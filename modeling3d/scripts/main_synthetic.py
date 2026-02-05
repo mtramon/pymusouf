@@ -16,7 +16,6 @@ import mat73 #read v7.3 mat files
 import palettable
 
 #package module(s)
-from config import MAIN_PATH
 from modeling3d.inversion import Inversion
 from modeling3d.voxel import Voxel
 from raypath import RayPathSoufriere
@@ -28,7 +27,7 @@ if __name__=="__main__":
 
     survey = CURRENT_SURVEY
     
-    main_path = MAIN_PATH #Path(__file__).parents[2] 
+    main_path = survey.path #Path(__file__).parents[2] 
 
     surface_grid = survey.surface_grid
     surface_center = survey.surface_center
@@ -64,7 +63,7 @@ if __name__=="__main__":
     mask_cyl = (vox_dist_to_center <= radius_cyl)
 
     
-    tel = survey.telescopes['SNJ']
+    tel = survey.telescope['SNJ']
 
     tel_files_path = survey.path / 'telescope' / tel.name 
 
@@ -199,7 +198,7 @@ if __name__=="__main__":
     ax.set_ylabel("Y [m]")
     ltel_n = ["SB", "SNJ", "BR", "OM"]
     str_tel =  "_".join(ltel_n)
-    ltel_coord = np.array([ str2telescope(tel).utm for tel in ltel_n])
+    ltel_coord = np.array([ str2telescope(tel).coordinates for tel in ltel_n])
     ltel_color = np.array([ str2telescope(tel).color for tel in ltel_n])
     ax.scatter(ltel_coord[:,0], ltel_coord[:,1], ltel_coord[:,-1], c=ltel_color, s=30,marker='s',)
 

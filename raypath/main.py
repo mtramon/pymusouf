@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)#, module="matplotlib")
 
-#personal modules
-from config import MAIN_PATH, FILES_DIR
+#package modules
 from telescope import str2telescope
 from raypath import RayPath
 from survey import CURRENT_SURVEY
@@ -33,10 +32,6 @@ params = {'legend.fontsize': 'xx-large',
 plt.rcParams.update(params)
 
 survey = CURRENT_SURVEY
-
-main_path = MAIN_PATH #Path(__file__).parents[1]
-files_path = FILES_DIR
-
 parser=argparse.ArgumentParser(description='''Compute ray path apparent thickness for given telescope''', epilog="""All is well that ends well.""")
 parser.add_argument('--telescope', '-tel', required=True, help='Telescope name (e.g SNJ). It provides the associated configuration.',  type=str2telescope) #required=True,
 parser.add_argument('--out_dir', '-o', default=None, type=str)
@@ -77,7 +72,7 @@ dict_config = args.telescope.configurations.items()
 for key, conf in dict_config:
     fig, ax = plt.subplots(figsize= (12,8))
     tel.compute_angle_matrix()
-    az0, ze0 = tel.azimuthMatrix[key]*180/np.pi, tel.zenithMatrix[key]*180/np.pi
+    az0, ze0 = tel.azimuth_matrix[key]*180/np.pi, tel.zenith_matrix[key]*180/np.pi
     Z0 = raypath.raypath[key]['thickness']
     profile_topo = raypath.raypath[key]['profile_topo']
     ax.plot(profile_topo[:,0], profile_topo[:,1], linewidth=3, color='black')

@@ -59,7 +59,6 @@ class FilterInlierMultipliciy(Filter):
         df_tmp = self.df.groupby([self.df.index, "Z", "inlier"]).count()#six
         Z = [p.position.z for p in self.tel.panels]
         lidx = [ (idx, z, i)  for idx in self.df.index.unique()  for z in Z for i in [0,1] ] 
-        
         #print("Before reindexing")
         mix = pd.MultiIndex.from_tuples(lidx, names=['ix', 'Z', 'inlier']) #six
         start_time = time.time()
