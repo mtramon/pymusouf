@@ -16,14 +16,14 @@ if __name__ == "__main__":
     surface = np.load(file)
     nx, ny, _ = surface.shape
     print(nx, ny)
+    
     # Créer la grille structurée
     grid = vtk.vtkStructuredGrid()
     grid.SetDimensions(nx, ny, 1)
-
     # Créer les points
     points = vtk.vtkPoints()
     points.SetNumberOfPoints(nx * ny)
-
+    
     k = 0
     for j in range(ny):
         for i in range(nx):

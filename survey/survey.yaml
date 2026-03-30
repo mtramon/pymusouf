@@ -2,46 +2,40 @@
 soufriere: 
   dem: /Users/raphael/structure/soufriere/dem/topo_roi.npy
   telescope:
+    SB: 
+      run:
+        tomo: /Users/raphael/data/SB/3dat/tomo
+        calib: /Users/raphael/data/SB/3dat/calib
+       
+    SNJ: 
+      run:
+        tomo: /Users/raphael/data/SNJ/Tomo2
+        calib: /Users/raphael/data/SNJ/CALIB2
+    
+    
+    SXF: 
+      run:
+        tomo: /Users/raphael/data/SXF/2023/27aug2023-12oct2023 
+    
     BR: 
       run:
-        tomo_2015: /Users/raphael/data/BR/3dat/tomo/2015
+        tomo_3dat_2015: /Users/raphael/data/BR/3dat/tomo/2015
+        tomo_3dat_2016: /Users/raphael/data/BR/3dat/tomo/2016
+        tomo_3dat_2017:  /Users/raphael/data/BR/3dat/tomo/2017
+        tomo_2017: /Users/raphael/data/BR/Tomo6/2017
         tomo_2018: /Users/raphael/data/BR/Tomo6/2018
+        tomo_2019: /Users/raphael/data/BR/Tomo6/2019
         calib: /Users/raphael/data/BR/Calib10
-      raypath: 
-      flux: 
+  
+    SBR: 
+      run:
+        tomo: /Users/raphael/data/SBR/2023
 
     OM: 
       run:
         tomo: /Users/raphael/data/OM/3dat/tomo
         calib: /Users/raphael/data/OM/3dat/calib
-      raypath:
-      flux: 
-
-    SB: 
-      run:
-        tomo: /Users/raphael/data/SB/3dat/tomo
-        calib: /Users/raphael/data/SB/3dat/calib
-      raypath:
-      flux: 
-
-    SBR: 
-      run:
-        tomo: /Users/raphael/data/SBR/2023
-      raypath:
-      flux: 
-
-    SNJ: 
-      run:
-        tomo: /Users/raphael/data/SNJ/Tomo2
-        calib: /Users/raphael/data/SNJ/CALIB2
-      raypath:
-      flux:  /Users/raphael/structure/soufriere/telescope/SNJ/flux/integral_flux_opensky.pkl
-
-    SXF: 
-      run:
-        tomo: /Users/raphael/data/SXF/2023/27aug2023-12oct2023/split/
-      raypath: 
-      flux: 
+       
 
 copahue: 
   dem: ../files/copahue/dem/copahue_surface_5m.npy

@@ -5,6 +5,7 @@ from pathlib import Path
 import vtk
 from tqdm import tqdm
 #package module(s)
+from config import STRUCT_DIR
 from telescope import DICT_TEL
 from survey import CURRENT_SURVEY
 
@@ -17,28 +18,30 @@ def sph_to_dir(az, ze):
 
 if __name__=="__main__":
 
-    souf_survey = CURRENT_SURVEY
-    dir_path = Path("/Users/raphael/structure/soufriere")
-    dtel = souf_survey.telescope
+
+    survey_name = CURRENT_SURVEY.name   
+    dir_survey = STRUCT_DIR / survey_name
+
+    dtel = CURRENT_SURVEY.telescope
     # dtel = {"OM":DICT_TEL["OM"]}
+   
     for tel_name, tel in tqdm(dtel.items(), desc="Raypath"):
         for conf_name, conf in tel.configurations.items():
             conf = tel.configurations[conf_name] #if conf_name in tel.configurations.keys() else
-            dir_acq = dir_path / "telescope" / tel_name / "acqvars"/f"az{tel.azimuth}ze{tel.zenith}"
+            dir_acq = dir_survey / "telescope" / tel_name / "acqvars"/f"az{tel.azimuth}ze{tel.zenith}"
             file_acqvar = dir_acq / f"acqVars_{conf_name[:2]}.npz" 
             if not file_acqvar.exists(): 
                 print(f"{file_acqvar} does not exist")
                 continue
             acqvar = np.load(file_acqvar)
             thickness = acqvar["apparentThickness"]
-            distances = acqvar["distances"]
             tel_pos = tel.coordinates 
-            tel.compute_angle_matrix()
+            tel.compute_angular_coordinates()
             azimuth = tel.azimuth_matrix[conf_name]
             zenith = tel.zenith_matrix[conf_name]
             delta_az, delta_ze = np.median(np.diff(azimuth.ravel())),  np.median(np.diff(zenith.ravel()))             
             Lmin = 1.
-            Lmax = 1000.0
+            Lmax = 1200.0
             nx, ny = azimuth.shape
             points = vtk.vtkPoints()
             polys = vtk.vtkCellArray()

@@ -1,1 +1,1 @@
-from .acceptance import GeometricalAcceptance
+from .acceptance import geometrical_acceptance

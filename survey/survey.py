@@ -27,10 +27,10 @@ class Survey:
         self.dem = Union[Path, str] #path to dem file
         self.telescope = {} #tel: Telescope object
         self.runs = {} #tel: path to data runsfiles
-        self.flux = {} #tel: path to expected flux files
-        self.raypath = {} #tel: path to raypath files
         self.surface_grid = np.ndarray #shape : (3, m, n)
         self.surface_center = None
+        # self.flux = {}
+        # self.raypath = {}
 
     def __str__(self): 
         sout = f"\nSurvey: {self.name}\n\n - "+ f"\n - ".join(v.__str__() for _,v in self.runs.items())
@@ -66,6 +66,7 @@ def get_runs(content:dict):
 
 def set_survey(name:str):
     survey = Survey()
+    survey.name = name
     if not name in LIST_AVAIL_SURVEY: 
         print(f"{name} survey not in 'survey.yaml'")
         return None
@@ -82,8 +83,8 @@ def set_survey(name:str):
         else: print(f"Tel {k} not in DICT_TEL")
         runs = get_runs(v["run"])
         survey.runs[k] = runs
-        if v["flux"] is not None : survey.flux[k] = v["flux"] 
-        if v["raypath"] is not None : survey.raypath[k] = v["raypath"] 
+        # if v["flux"] is not None : survey.flux[k] = v["flux"] 
+        # if v["raypath"] is not None : survey.raypath[k] = v["raypath"] 
     return survey
 
 def str2survey(v):

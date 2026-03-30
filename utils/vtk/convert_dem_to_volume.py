@@ -33,11 +33,6 @@ nz = int((z_surface.max() - z_base) // res)
 print("nz = ", nz)
 z_levels = np.linspace(z_base, z_surface.max(), nz)
 
-
-# Créer la grille structurée
-grid = vtk.vtkStructuredGrid()
-grid.SetDimensions(nx, ny, 1)
-
 # Créer les points
 points = vtk.vtkPoints()
 points.SetNumberOfPoints(nx * ny * nz)
@@ -55,6 +50,7 @@ for k in tqdm(range(nz), total=nz, desc="Point"):
             )
             pid += 1
 
+# Créer la grille structurée
 grid = vtk.vtkStructuredGrid()
 grid.SetDimensions(nx, ny, nz)
 grid.SetPoints(points)
@@ -76,8 +72,14 @@ for k in tqdm(range(nz), total=nz, desc="Value"):
 
 grid.GetPointData().AddArray(solid)
 grid.GetPointData().AddArray(elevation)
+writer = vtk.vtkXMLStructuredGridWriter()
+file_out = dir_dem / f"{basename}_volume_{int(res)}m.vts"
+writer.SetFileName(file_out)
+writer.SetInputData(grid)
+writer.Write()
+print(f"Saved {file_out}")
 
-
+'''
 threshold = vtk.vtkThreshold()
 threshold.SetInputData(grid)
 threshold.SetInputArrayToProcess(
@@ -89,11 +91,11 @@ threshold.SetLowerThreshold(1)
 threshold.SetUpperThreshold(1)
 threshold.Update()
 ugrid = threshold.GetOutput()
-print(ugrid.GetNumberOfCells())
-print(ugrid.GetNumberOfPoints())
+
 writer = vtk.vtkXMLUnstructuredGridWriter()
 file_out = dir_dem / f"{basename}_volume_{int(res)}m.vtu"
 writer.SetFileName(file_out)
 writer.SetInputData(ugrid)
 writer.Write()
-print(f"Save {file_out}")
+print(f"Saved {file_out}")
+'''

@@ -1,7 +1,7 @@
-## 1. Processing:  
-To process raw telescope data and reconstruct particle track event-by-event, the user needs to run ```python3 processing/main.py``` with the following arguments:    
+### Tracking
+To process raw telescope data and reconstruct particle track event-by-event, the user needs to run ```python3 processing/tracks.py``` with the following arguments:    
 INPUTS:  
-    - ```--telescope [-tel]``` (str2telescope) the telescope name (required): Check the available telescope configurations in  dictionary ```dict_tel``` in ```telescope/telescope.py```.  
+    - ```--telescope [-tel]``` (str2telescope) the telescope name (required): Check the available telescope configurations in ```survey/survey.yaml```or in  dictionary ```DICT_TEL``` in ```telescope/telescope.py```.  
     - ```--run [-r]``` (str) which telescope run (e.g.```tomo```, ```calib```), check ```survey/survey.yaml```
     - (optional) ```--max_nfiles [-nf]```  (int, default is ```1```) the maximum number of data files to process.  
     - (optional) ```--max_nevents [-nev]```  (int, default is ```1```) the maximum number of events to process.  
@@ -13,3 +13,9 @@ INPUTS:
 
 OUTPUTS:  
     Dataframe```df_track.csv.gz```  
+
+### Brut images and event rate
+See ```plot_images.py```
+
+### Pipeline to opacity estimates
+See ```muography.py```

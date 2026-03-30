@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from dataclasses import dataclass, field
-from abc import abstractmethod
-from typing import List, Union
-from enum import Enum, auto
-import numpy as np 
-from pathlib import Path
 import argparse
-import json
+from dataclasses import dataclass, field
+from enum import Enum, auto
 import matplotlib.axes 
+import numba
+import numpy as np 
+import json
+from typing import List
 
 #package module(s)
 from config import STRUCT_DIR
@@ -103,20 +102,34 @@ class PanelConfig:
 
 
     def __post_init__(self):
-        s_xy = self.panels[0].matrix.scintillator.length
-        z_front, z_rear =  self.panels[0].position.z, self.panels[-1].position.z
+        front, rear =  self.panels[0], self.panels[-1]
+        # s_xy = front.matrix.scintillator.length
+        s_xy = front.matrix.scintillator.length #- front.matrix.scintillator.width #- front.matrix.scintillator.width/2
+        z_front, z_rear =  front.position.z, rear.position.z
         length_z = abs(z_front - z_rear)
-        _ext = s_xy / length_z
+        
         # if len(self.panels) == 3:
             # z_middle = self.panels[1].position.z
             # if constraint on middle panel:
             # dz = abs(z_front-z_middle)
             # alpha = (dz/ length_z)
             # _ext = self.get_angular_extremum(s_xy, length_z, alpha=alpha)
-        range_tanthetaxy = np.array([[-_ext, _ext], [-_ext, _ext]])
+        
+        # Muography angular coordinates XY :  u = dx/dz = tan_theta_x ; v = dy/dz = tan_theta_y 
+        uv_ext = s_xy / (length_z) 
+        range_uv = np.array([[-uv_ext, uv_ext], [-uv_ext, uv_ext]])
         object.__setattr__(self, 'length_z',  length_z )
-        object.__setattr__(self, 'range_tanthetaxy',  range_tanthetaxy )
-        object.__setattr__(self, 'rays', None)    
+        object.__setattr__(self, 'range_uv',  range_uv )
+        nx, ny = front.matrix.nbars_x, front.matrix.nbars_y
+        nu, nv = 2*nx-1, 2*ny-1 # number of angular bins in u and v directions (binning centered on 0)
+        object.__setattr__(self, 'npixels', nu*nv )
+        object.__setattr__(self, 'shape_uv',(nu, nv))
+        u_min, u_max = range_uv[0][0], range_uv[0][1]
+        v_min, v_max = range_uv[1][0], range_uv[1][1]
+        u_edges = np.linspace(u_min, u_max, nu+1)
+        v_edges = np.linspace(v_min, v_max, nv+1)
+        object.__setattr__(self, 'u_edges', u_edges)
+        object.__setattr__(self, 'v_edges', v_edges)
 
     def get_angular_extremum(self, size_xy, delta_z, alpha=1/2):
         return size_xy/delta_z * min(alpha, 1-alpha)
@@ -243,7 +256,7 @@ class Telescope:
         for k in range(self.rays.shape[0]):       
             ax.scatter(self.rays[k,-1, 0], self.rays[k,-1, 1], self.rays[k,-1, 2], c=color_values[k], **kwargs)    
 
-    def compute_angle_matrix(self):
+    def compute_angular_coordinates(self):
         """
         Calcule, pour chaque configuration (3p / 4p),
         les matrices (phi, theta) associées au binning angulaire local
@@ -252,6 +265,8 @@ class Telescope:
         self.directions_matrix = {}
         self.azimuth_matrix = {}
         self.zenith_matrix = {}
+        self.zenith_os_matrix = {}
+
         az = np.pi/2 - np.deg2rad(self.azimuth)
         ze = np.pi/2 - np.deg2rad(self.elevation)
         # Rotation autour de Z (azimuth)
@@ -273,17 +288,17 @@ class Telescope:
             ny = front.matrix.nbars_y
             w  = front.matrix.scintillator.width
             dz = conf.length_z
-            nbin_x = 2 * nx - 1
-            nbin_y = 2 * ny - 1
-            dir_mat = np.zeros((nbin_x, nbin_y, 3))
-            phi_mat   = np.zeros((nbin_x, nbin_y))
-            theta_mat = np.zeros((nbin_x, nbin_y))
+            nu, nv = conf.shape_uv
+            dir_mat = np.zeros((nu, nv, 3))
+            phi_mat   = np.zeros((nu, nv))
+            theta_mat = np.zeros((nu, nv))
+            theta_os_mat = np.zeros((nu, nv))
             for j, dy in enumerate(range(-ny + 1, ny)):
                 for i, dx in enumerate(range(-nx + 1, nx)):
-                    # Direction locale (x, y, z)
+                    # Direction local pixel (x, y, z)
                     v_local = np.array([
-                        dx * w,
-                        dy * w,
+                        - dx * w,
+                        - dy * w,
                         dz,
                     ], dtype=float)
                     v_local /= np.linalg.norm(v_local)
@@ -293,11 +308,15 @@ class Telescope:
                     # Angles sphériques
                     phi   = np.arctan2(v_global[1], v_global[0])   # [-π, π]
                     theta = np.arccos(v_global[2])                 # [0, π]
+                    theta_os = np.arccos(v_local[2])
                     phi_mat[i, j]   = phi
-                    theta_mat[i, j] = theta
+                    theta_mat[i, j] = theta 
+                    theta_os_mat[i,j] = theta_os
             self.directions_matrix[conf.name] = dir_mat
             self.azimuth_matrix[conf.name] = tools.wrapToPi(phi_mat)
             self.zenith_matrix[conf.name]  = theta_mat
+            self.zenith_os_matrix[conf.name]  = theta_os_mat
+        self.rotation_matrix = R
 
 
     def get_pixel_xy(self):
@@ -365,6 +384,55 @@ class Telescope:
         ax.set_zticklabels([])
         ax.annotate("Z", xy=(0.5, .5), xycoords='axes fraction', xytext=(0.04, .78),)
         return ax
+
+    # @numba.njit
+    def adjust_height(
+        self,
+        x_edges, y_edges, z_edges,
+        mask_voxel,
+        offset=1.0
+    ):
+        """
+        Vérifie si le détecteur est sous la topographie voxelisée.
+        Si oui, le repositionne à (surface + offset).
+        Retour :
+            new_z0, was_adjusted (bool)
+        """
+        nx = len(x_edges) - 1
+        ny = len(y_edges) - 1
+        nz = len(z_edges) - 1
+        # Trouver indices i, j
+        i = -1
+        j = -1
+        x0, y0, z0 = self.coordinates
+        for ix in range(nx):
+            if x_edges[ix] <= x0 < x_edges[ix + 1]:
+                i = ix
+                break
+        for iy in range(ny):
+            if y_edges[iy] <= y0 < y_edges[iy + 1]:
+                j = iy
+                break
+        if i == -1 or j == -1:
+            # détecteur hors grille horizontale
+            return z0, False
+        # Chercher voxel actif le plus haut
+        top_z = -1e30
+        found = False
+        for k in range(nz):
+            vid = i + nx * (j + ny * k)
+            if mask_voxel[vid] == 1:
+                top_z = z_edges[k + 1]  # sommet du voxel
+                found = True
+        if not found:
+            # aucune topographie sous ce point
+            return z0, False
+        surface_z = top_z
+        znew = surface_z + offset
+        if z0 < znew:
+            self.coordinates[2] = znew
+            return znew, True
+        return z0, False
 
 scint_Fermi = Scintillator(type="Fermilab", length=800, width=50, thickness=7 )
 scint_JINR = Scintillator(type="JINR", length=800, width=25, thickness=7 )
@@ -489,7 +557,6 @@ tel_SB.pmts = Config_3p1_32x32.pmts
 ####SNJ: SuperNainJaune GW Parking 2019
 tel_name = 'SNJ'
 tel_SNJ = Telescope(name=tel_name)
-
 tel_SNJ.coordinates = np.array([642782.001377887, 1773682.54931093, 1143.])
 tel_SNJ.azimuth = 18.0#20.5#20
 tel_SNJ.zenith = 74.9#16

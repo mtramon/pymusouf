@@ -4,7 +4,7 @@
 from setuptools import setup, find_packages
 
 REQUIREMENTS = [
-    'iminuit', # for advanced fit in 'utils/functions.py'
+    'iminuit', #fit in 'utils/functions.py'
     'matplotlib',
     'mat73', #read v7.3 mat files
     'numba', #for multiprocessing
@@ -19,6 +19,7 @@ REQUIREMENTS = [
     'scikit-learn', #ml library
     'scikit-image', #ransac
     'scipy', 
+    'torch', #machine learning
     'tqdm', #process monitoring 
     'seaborn',#nice plot templates
     'uproot', #to read, update, and write root file

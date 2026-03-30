@@ -1,6 +1,7 @@
 .DS_Store
 .venv
 .vscode
+.old
 */__pycache__
 */*/__pycache__
 pymusouf.egg-info/
@@ -9,14 +10,16 @@ data/
 exe/
 modeling3d/inversion/old
 modeling3d/scripts/old
-muo2d/old
 out/
 tracking/old
 test.py
 */.old
+*/.tmp
 *.csv.gz
 files
 struct_link
 data_link
 *.csv
 *cache.json
+*.npz
+*.png

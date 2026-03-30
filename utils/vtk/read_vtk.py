@@ -7,9 +7,11 @@ import vtk
 #package module(s)    
 from utils.tools import print_file_datetime
 
-dir_dem = Path("/Users/raphael/structure/soufriere/voxel")
+dir_dem = Path("/Users/raphael/structure/soufriere/dem")
+dir_model = Path("/Users/raphael/structure/soufriere/models")
 # file = dir_dem / "topo_roi.vts"
-file = dir_dem / "topo_voi_vox8m.vtu"
+# file = dir_dem / "topo_voi_vox8m.vtu"
+file = dir_model / "ElecCond_CentralCube.vtk"
 # file = dir_dem / "topo_voi_vox64m.vtu"
 basename = file.stem
 grid = pv.read(file)

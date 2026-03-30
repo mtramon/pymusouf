@@ -17,6 +17,11 @@ import sys
 from scipy.interpolate import griddata
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
 
+def format_time(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
 def get_file_datetime(file:Path|str):
     if isinstance(file, str): file=Path(file)
     dt = datetime.fromtimestamp(file.stat().st_mtime)
@@ -419,6 +424,25 @@ def wrapToPi(x):
     xwrap[mask1 & mask2 & mask3] -= 2 * np.pi
     return xwrap
 
+
+def check_array_order(arr: np.ndarray) -> str:
+    """
+    Vérifie l'ordonnancement mémoire d'un array NumPy.
+    
+    Retourne:
+        "C" si C-contiguous (row-major)
+        "F" si Fortran-contiguous (column-major)
+        "CF" si les deux
+        "None" si aucun des deux
+    """
+    if arr.flags['C_CONTIGUOUS'] and arr.flags['F_CONTIGUOUS']:
+        return "CF"
+    elif arr.flags['C_CONTIGUOUS']:
+        return "C"
+    elif arr.flags['F_CONTIGUOUS']:
+        return "F"
+    else:
+        return "None"
 
 if __name__=="__main__":
     

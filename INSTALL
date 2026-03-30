@@ -1,3 +1,10 @@
+1. First steps
+- Edit global paths to data and terrain structure in ```config/config.yaml``` 
+- Edit ```CURRENT_SURVEY```  in the ```survey/survey.py``` module (either ```soufriere``` or ```copahue```, default is ```soufriere```). 
+
+2. Compilation and installation
+Check ```INSTALL``` file.
+
 To install the package, make sure you have Python v3.7 or higher installed.  
 
 In the current package directory, first create a virtual environment, running: 

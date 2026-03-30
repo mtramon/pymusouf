@@ -17,6 +17,15 @@ class Run:
     def __str__(self): return f"Run: {self.name}"
     def __post_init__(self):
         self.path = Path(self.path)
+        self.make_dirs()
+        
+    def make_dirs(self):
+        self.dirs={}
+        list_subdirs = ["raw", "reco", "log", "png", "npy", "pkl"]
+        for sd in list_subdirs: 
+            subdir = self.path / sd
+            subdir.mkdir(parents=True, exist_ok=True)
+            self.dirs[sd] = subdir
 
 class RunCalib(Run):
     def __init__(self, **kwargs):

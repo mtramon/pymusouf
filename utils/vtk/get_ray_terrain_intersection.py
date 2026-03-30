@@ -26,9 +26,8 @@ dir_tel = dir_main / "telescope"
 detectors = {
         "SB": dir_tel / "SB/acqvars/az40.0ze79.0/raypath_SB_3p.vtu",
         "SNJ_3p" : dir_tel / "SNJ/acqvars/az18.0ze74.9/raypath_SNJ_3p.vtu",
-       "SNJ_4p":dir_tel / "SNJ/acqvars/az18.0ze74.9/raypath_SNJ_4p.vtu",
+        "SNJ_4p":dir_tel / "SNJ/acqvars/az18.0ze74.9/raypath_SNJ_4p.vtu",
         "BR": dir_tel / "BR/acqvars/az297ze80/raypath_BR_3p.vtu",
-    
         "OM": dir_tel / "OM/acqvars/az192ze76.6/raypath_OM_3p.vtu",
     }
 for k, v in detectors.items() : 

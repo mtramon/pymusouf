@@ -29,6 +29,25 @@ def erf_func(x:np.ndarray, b:float, p:float,t:float,w:float):
     func = b + p/2*(1+sc.erf( (x-t)/(np.sqrt(2)*w) ))
     return func
 
+
+def smooth_window(x, xmax, width_frac=.05):
+    """_summary_
+    Args:
+        x (_type_): _description_
+        xmax (_type_): _description_
+        width_frac (int, optional): épaisseur zone de transition lissée au bord du champa angulaire. Defaults to 1.
+
+    Returns:
+        _type_: _description_
+    """
+    w = width_frac * xmax
+    if abs(x) < xmax - w:
+        return 1.0
+    if abs(x) > xmax:
+        return 0.0
+    t = (xmax - abs(x)) / w
+    return 0.5 * (1 - np.cos(np.pi * t))
+
 # def fit_landau_migrad(x, y, p0, limit_mpv, limit_eta, limit_sigma, limit_A):
 #     def minimizeMe(mpv, eta, sigma, A):
 #         chi2 = np.sum(np.square(y - pylandau.langau(x, mpv, eta, sigma, A).astype(float)) / np.square(yerr.astype(float)))

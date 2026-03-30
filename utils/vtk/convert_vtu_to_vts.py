@@ -15,6 +15,7 @@ in ParaView (use the `cell_id` cell array).
 
 from pathlib import Path
 from tqdm import tqdm
+import sys
 import vtk
 
 # package module(s)
@@ -24,8 +25,12 @@ from utils.tools import print_file_datetime
 dir_survey = Path("/Users/raphael/structure/soufriere")
 dir_dem = dir_survey / "dem"
 dir_voxel = dir_survey / "voxel"
-vs = 8  # voxel size in m (edge length)
+dir_model = dir_survey / "model"
+vs = int(sys.argv[1]) if len(sys.argv) > 1 else 16  # voxel size in m (edge length)
 input_file = dir_voxel / f"topo_voi_vox{vs}m.vtu"
+# input_file = dir_voxel / f"topo_center_anom_voi_vox{vs}m.vtu"
+# input_file = dir_voxel / f"topo_bulge_voi_vox{vs}m.vtu"
+basename = input_file.stem
 print_file_datetime(input_file)
 
 # read source unstructured grid (the original model to reference)
@@ -43,6 +48,12 @@ cell_locator.BuildLocator()
 voxel_volume_array = src_ugrid.GetCellData().GetArray("voxel_volume")
 if voxel_volume_array is None:
     raise ValueError("Source grid does not contain 'voxel_volume' cell array")
+fdens = True
+voxel_density_array = src_ugrid.GetCellData().GetArray("density")
+if voxel_density_array is None:
+    fdens = False
+    # raise ValueError("Source grid does not contain 'density' cell array")
+
 
 # bounds and voxel counts
 xmin, xmax, ymin, ymax, zmin, zmax = src_ugrid.GetBounds()
@@ -96,6 +107,12 @@ sg_voxel_volumes.SetName("voxel_volume")
 sg_voxel_volumes.SetNumberOfComponents(1)
 sg_voxel_volumes.SetNumberOfTuples(nvox_x * nvox_y * nvox_z)
 
+if fdens : 
+    sg_voxel_densities = vtk.vtkFloatArray()
+    sg_voxel_densities.SetName("density")
+    sg_voxel_densities.SetNumberOfComponents(1)
+    sg_voxel_densities.SetNumberOfTuples(nvox_x * nvox_y * nvox_z)
+
 cnt = 0
 for k in tqdm(range(nvox_z), desc="Structured grid cell mapping"):
     for j in range(nvox_y):
@@ -108,15 +125,20 @@ for k in tqdm(range(nvox_z), desc="Structured grid cell mapping"):
             if src_cell_id >= 0:
                 vol = voxel_volume_array.GetValue(int(src_cell_id))
                 sg_voxel_volumes.SetValue(cnt, vol)
+                if fdens :
+                    dens = voxel_density_array.GetValue(int(src_cell_id))
+                    sg_voxel_densities.SetValue(cnt, dens)
             else:
                 sg_voxel_volumes.SetValue(cnt, 0.0)
+                if fdens : sg_voxel_densities.SetValue(cnt, 0.0)
             cnt += 1
 
 sgrid.GetCellData().AddArray(sg_cell_ids)
 sgrid.GetCellData().AddArray(sg_voxel_volumes)
+if fdens : sgrid.GetCellData().AddArray(sg_voxel_densities)
 sgrid.GetCellData().SetScalars(sg_cell_ids)
 
-out_vts = dir_voxel / f"topo_voi_vox{vs}m.vts"
+out_vts = dir_voxel / f"{basename}.vts"
 writer_vts = vtk.vtkXMLStructuredGridWriter()
 writer_vts.SetFileName(str(out_vts))
 writer_vts.SetInputData(sgrid)
@@ -128,6 +150,7 @@ print(f"Saved structured grid: {out_vts}")
 #############################
 # Build ImageData (VTI) with cell-data cell_id
 #############################
+'''
 image = vtk.vtkImageData()
 # For vtkImageData, dimensions are number of points -> points = voxels+1
 image.SetDimensions(nxp, nyp, nzp)
@@ -165,7 +188,7 @@ image.GetCellData().AddArray(img_cell_ids)
 image.GetCellData().AddArray(img_voxel_volumes)
 image.GetCellData().SetScalars(img_cell_ids)
 
-out_vti = dir_voxel / f"topo_voi_vox{vs}m.vti"
+out_vti = dir_voxel / f"{basename}.vti"
 writer_vti = vtk.vtkXMLImageDataWriter()
 writer_vti.SetFileName(str(out_vti))
 writer_vti.SetInputData(image)
@@ -173,3 +196,4 @@ writer_vti.Write()
 print(f"Saved image data: {out_vti}")
 
 print("All conversions done. Load any of the outputs in ParaView and use the 'cell_id' cell array to select corresponding cells from the source model.")
+'''

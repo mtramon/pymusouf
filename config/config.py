@@ -14,8 +14,8 @@ DATA_DIR = Path(config["data_dir"])
 STRUCT_DIR = Path(config["struct_dir"])
 
 def use_paths():
-    print(f"DATA_DIR: {DATA_DIR}")
-    print(f"STRUCT_DIR: {STRUCT_DIR}")
+    print(f"DATA_DIR: {DATA_DIR}, exists: {STRUCT_DIR.exists()}")
+    print(f"STRUCT_DIR: {STRUCT_DIR}, exists: {STRUCT_DIR.exists()}")
 
 if __name__ == "__main__":
     use_paths()

@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from re import A
 import numpy as np
 from scipy.integrate import quad, solve_ivp
-import scipy.io as sio
-import matplotlib.pyplot as plt
-import matplotlib.lines as mlines  #use for legend settings
-import matplotlib.patches as mpatch  #use for legend settings
-import os
-from random import choice, seed
-from pathlib import Path
 
 #https://pdg.lbl.gov/2021/AtomicNuclearProperties/adndt.pdf
 
 class StoppingPower:
+    
     def __init__(self, I:float=None, plasma_energy:float=None):
         """
         I : Mean excitation energy in eV
@@ -33,7 +26,6 @@ class StoppingPower:
                     'plasma_energy':plasma_energy,  #  #eV  
                     }
 
-    
     def delta(self, x, Z_A, rho, stern_coef=None, rho0=None):
         """
         density-effect corrections
@@ -65,8 +57,7 @@ class StoppingPower:
         #     r = rho/rho0
         #     Cbar = Cbar - np.log(r)
         #     x0 = x0 - 0.5*np.log10(r)
-        #     x1 = x1 - 0.5*np.log10(r)
-            
+        #     x1 = x1 - 0.5*np.log10(r) 
         if isinstance(x, float):
             if x >= x1 : delta = 2*np.log(10)*x[(x>=x1)] - Cbar 
             elif (x0 <= x) & (x < x1) : delta =2*np.log(10)*x[((x0 <= x) & (x < x1))] - Cbar + a*(x1-x[((x0 <= x) & (x < x1))])**k
@@ -80,17 +71,17 @@ class StoppingPower:
         #delta[(x < x0)] =  delta0*10**(2*(x[(x < x0)]-x0)) #for conductors
         return delta
 
-    def bethe_bloch(self, T, Z_A, rho, brem_corr=True, dens_effect=True, stern_coef=None, rho0=None):
+    def bethe_bloch(self, T, Z_A, rho, is_brem_corr=True, dens_effect=True, stern_coef=None, rho0=None):
         """
         Groom et al. 2001
         Mass stopping power [MeV/(g.cm^-2)] as a function of kinetic energy T [MeV].
-        Inputs: 
-            - T: kinetic energy in MeV
-            - Z_A: Z/A ratio with Z=atomic number A=atomic mass [g/mol]
-            - rho: medium density in g/cm^3
-            - brem_corr: high-energy correction term 'Delta(Z,A)' 
+        Args: 
+            T (array): kinetic energy in MeV
+            Z_A (float): Z/A ratio with Z=atomic number A=atomic mass [g/mol]
+            rho (float): medium density in g/cm^3
+            is_brem_corr (bool): high-energy correction term 'Delta(Z,A)' 
         Returns: 
-            - dE/dx mass stopping power in MeV.cm^2/g
+            dE/dx (array) mass stopping power in MeV.cm^2/g
         """
         me, mu = self.par['me'], self.par['mu'] ##MeV
         I = self.par["I"] *1e-6  #MeV
@@ -104,7 +95,7 @@ class StoppingPower:
         E = gamma*mu*c**2
         Delta = 0
         ###Bremsstrahlung  correction from atomic electrons
-        if brem_corr : 
+        if is_brem_corr : 
             Delta = C1 /(4*np.pi)*alpha*( np.log(2*E/(mu*c**2)) - 1/3 * np.log(2*Qmax/(me*c**2))  ) * np.log(2*Qmax/(me*c**2))**2   
         ####
         x = np.log10(beta*gamma)
@@ -117,10 +108,10 @@ class StoppingPower:
         if dens_effect : 
             delta = self.delta(x, Z_A, rho, stern_coef)
     
-        dEdx  = C1/beta**2 * ( 0.5*np.log( (2*me*c**2 * beta**2 * gamma**2 * Qmax)/I**2) - beta**2 - delta/2  + 1/8 * Qmax**2/(gamma*mu*c**2)**2 ) + Delta #
-        if not isinstance(dEdx,np.float64):
-            dEdx[np.isnan(dEdx)] = 0
-        return dEdx
+        dedx  = C1/beta**2 * ( 0.5*np.log( (2*me*c**2 * beta**2 * gamma**2 * Qmax)/I**2) - beta**2 - delta/2  + 1/8 * Qmax**2/(gamma*mu*c**2)**2 ) + Delta #
+        if not isinstance(dedx,np.float64):
+            dedx[np.isnan(dedx)] = 0
+        return dedx
 
     def valentin(self, T, Z_A, Z, rho):
         """
@@ -155,12 +146,11 @@ class StoppingPower:
         if ksi >= 1e3:  B_e = 1/(2*ksi) * ((3-rho**2) + 2*beta*(1+rho**2)) #ok
         Y_e = (5 - rho**2 + 4*beta*(1+rho**2))/ ( 2*(1+3*beta)*np.log(3+1/ksi) - rho**2 - 2*beta*(2-rho**2) )
         ####
-       # if ksi < -1 : print(rho,nu,f"ksi={ksi}" )
+        # if ksi < -1 : print(rho,nu,f"ksi={ksi}" )
         #q= (1+ksi)*(1+Y_e)
         #if q < 0 : print(rho,nu,q )
         #r = Astar*Z**(-1/3) * np.sqrt((1+ksi)*(1+Y_e))  / ( 1 + (2*me*np.sqrt(np.exp(1)) * Astar * Z**(-1/3) * (1+ksi)*(1+Y_e) ) / (E*nu*(1-rho**2)) )
         ####
-        
         Lprim_e = np.log( Astar*Z**(-1/3) * np.sqrt((1+ksi)*(1+Y_e))  / ( 1 + (2*me*np.sqrt(np.exp(1)) * Astar * Z**(-1/3) * (1+ksi)*(1+Y_e) ) / (E*nu*(1-rho**2)) ) ) - 0.5*np.log( 1 + ((3*me*Z**(1/3))/(2*mu) )**2 * (1+ksi)*(1+Y_e) ) #ok
         B_mu = ((1+rho**2)*(1+3*beta/2) - 1/ksi * (1+2*beta)*(1-rho**2) ) * np.log(1+ksi) #ok
         B_mu += (ksi*(1-rho**2-beta**2))/(1+ksi) + (1+2*beta)*(1-rho**2)  #ok
@@ -247,10 +237,10 @@ class StoppingPower:
     def cs_brems(self, nu, E, A, Z):
         '''
         cf. sec10.2 G4_PhysicsReferenceManual
-        Inputs:
+        Args:
             nu: fractional energy transfer [0,1] dimensionless
             E: kinetic energy in GeV
-        Return: 
+        Returns: 
             Bremsstrahlung differential cross section in cm^2/g
         '''
         alpha, me, mu, re, Na = self.par['alpha'], self.par['me']*1e-3, self.par['mu']*1e-3, self.par['re']*1e-13, self.par['Na']
@@ -276,7 +266,6 @@ class StoppingPower:
         #Phi_in = lambda d: np.log(mu/d/(mu*d/me**2 + np.sqrt(e))) - np.log(1 + me/(d*B_bis*Z**(-2/3)*np.sqrt(e)))
         #cs_elec = alpha * Z * (2*me/mu * re)**2 * (4/3 - 4/3*nu + nu**2) * Phi_in(delta)/nu
         #cs  = cs_nuc + cs_elec 
-        
         return cs
 
     def b_brems(self, E, A, Z):
@@ -286,13 +275,12 @@ class StoppingPower:
         return res 
 
     def cs_nuc(self, nu, E, A):
-       
-        '''
-        cf. Groom et al. 2001
-        Inputs:
+        '''Groom et al. 2001
+
+        Args:
             nu: fractional energy transfer [0,1] dimensionless
             E: kinetic energy in GeV
-        Return: 
+        Returns: 
             Bremsstrahlung differential cross section in cm^2/g
         '''
         alpha, mu = self.par["alpha"], self.par["mu"]*1e-3 #GeV
@@ -312,12 +300,12 @@ class StoppingPower:
         return cs # in cm2/g
         
     def b_nuc(self, E, A, Z=None):
-        """
-        cf. Groom et al. 2001
-        Inputs:
+        """Groom et al. 2001
+
+        Args:
             E: float (energy in GeV)
             A: float (atomic mass in g/mol)
-        Return: 
+        Returns: 
             b: float (photo-nuclear effect in cm^2/g)
         """
         Na = self.par["Na"]
@@ -326,91 +314,137 @@ class StoppingPower:
         return res
 
 
-    def get_min_energy(self, func, x:float, E0:float, Emax:float=1e8, **kwargs): 
-        #try:
-        if x == 0: emin = E0
-        else: 
-            emin =  solve_ivp(fun=func, t_span=[0, x], y0=[E0], t_eval=[x], **kwargs).y[0][-1]  
-        return emin
-        #except:
-        #    raise ValueError
+    def get_min_energy(self, func, x:float, e0:float, emax:float=1e8, **kwargs): 
+        """Compute the minimal crossing energy in MeV
+
+        Args:
+            func (_type_): stopping power functional parameterisation 
+            x (float): opacity in [g/cm^2]
+            E0 (float): initial energy in MeV
+            emax (float, optional): maxmal energy in MeV. Defaults to 1e8.
+
+        Returns:
+            emin (float): minimal crossing energy
+        """
+        x = float(x)
+        if x == 0:
+            return e0
+        sol = solve_ivp(fun=func, t_span=[0, x], y0=[e0], t_eval=[x], **kwargs)
+        return sol.y[0, -1]
     
-    def minimum_energy(self, func, opacity:np.ndarray, E0:float, **kwargs):
+    def minimum_energy(self, func, opacity:np.ndarray, e0:float=None, **kwargs):
         """
         To cross distance 'L'[m] in medium with density 'rho'[g.cm^-3] 
         """
-        out_arr = np.zeros(opacity.shape)
-        for i in range(opacity.shape[0]):
-            for j in range(opacity.shape[1]):
-                x = opacity[i,j]
-                out_arr[i,j]= self.get_min_energy(func, x, E0=E0, **kwargs)
-        return out_arr
+        if e0 is None:
+            e0 = self.par['mu']
+
+        opacity = np.asarray(opacity, dtype=float)
+        flat_opacity = opacity.ravel()
+        res_flat = np.full(flat_opacity.shape, e0, dtype=float)
+
+        if flat_opacity.size == 0:
+            return res_flat.reshape(opacity.shape)
+
+        pos_mask = flat_opacity > 0
+        if np.any(pos_mask):
+            x_pos = flat_opacity[pos_mask]
+            sort_idx = np.argsort(x_pos)
+            x_sorted = x_pos[sort_idx]
+            x_unique, inv = np.unique(x_sorted, return_inverse=True)
+
+            sol = solve_ivp(
+                fun=func,
+                t_span=[0, x_unique[-1]],
+                y0=[e0],
+                t_eval=x_unique,
+                **kwargs,
+            )
+            e_sorted = sol.y[0, inv]
+            e_pos = np.empty_like(x_pos)
+            e_pos[sort_idx] = e_sorted
+            res_flat[pos_mask] = e_pos
+
+        # Fallback for negative opacities: preserve existing scalar behavior.
+        neg_idx = np.where(flat_opacity < 0)[0]
+        for idx in neg_idx:
+            res_flat[idx] = self.get_min_energy(func, flat_opacity[idx], e0=e0, **kwargs)
+
+        return res_flat.reshape(opacity.shape)
+
+    def min_energy(self, func, opacity:np.ndarray, e0:float=None, **kwargs):
+        """Alias of minimum_energy."""
+        return self.minimum_energy(func=func, opacity=opacity, e0=e0, **kwargs)
     
-
-
-'''
-import sympy as sy
-
-def cs_pair_nuc_nikishov(self, nu, E, Z):
-        alpha, re, me, mu = self.par["alpha"], self.par["re"]*1e-13, self.par["me"]*1e-3, self.par["mu"]*1e-3
-        factor = (2*alpha*re*Z)**2/np.pi * (1-nu)/nu 
-        eps = nu*E
-        theta= (me/mu)**2
-        z = nu**2/(theta*(1-nu))
-        B = lambda v : np.sqrt(1/4 + 1/v) 
-        z1, z2 = B(z)-0.5, B(z)+0.5
-        y = (z1+z2)/z2**2
-        integrand = lambda t : -np.log(1-t)/t 
-        Li2 = lambda x : quad(integrand, 0, x)[0]
-        ###f1 + theta * f3 
-        term1 = 44/(45*z) - 16/45 - 4/9*theta - (7/9 + 8/45 * z + 7/18*z*theta)*np.log(z) #ok
-        term1 += (16/45*z+38/45-44/(45*z) + 4/(3*(z+4)) + (7/9*z - 2/9 + 8/(3*(z+4)))*theta)*B(z)*np.log(z2/z1) #ok
-    
-        ###phi2 + theta*phi4
-        term2 = (7/36 + 2/45*z +7/72*z*theta) * (np.log(z2/z1)**2+np.pi**2+2*np.log(z)**2)#ok
-        term2 += (7/18 + 3/20*z + 7/36*z*theta)*np.log(z) + 653/270 - 28/(9*z) + 2/3*theta #ok
-        term2 += (-3/10*z - 92/45 + 52/(45*z) - (2/9 - 7/18*z)*theta)*B(z)*np.log(z2/z1) #ok
-        term2 += B(z)*(-8/45*z - 19/45 - 8/(45*z) - (2/9 + 7/18*z)*theta)*(Li2(y) + 2*Li2(1/z2) + 3/2*np.log(z2/z1)**2) #ok
-        term2 += (8/z + z*theta)*B(z)/(3*(z+4))*(6*Li2(1/z2)-Li2(y)+0.5*np.log(z2/z1)**2) #ok
-    
-        ###I         
-        ene = sy.Symbol('ene')
-        gamma = ene/mu #P0 / mu
-        gammaprime = gamma.diff(ene)
-        Dgamma = sy.lambdify(ene, gammaprime, 'numpy')
-        s = (2*np.sqrt(E/mu*Dgamma(E))*Z**(1/3))/(183*np.sqrt(np.exp(1)))
-        w = s*np.sqrt(z)
-        u = w + z
-        u1 = B(u)-0.5
-        u2 = B(u)+0.5
-        w1 = B(w)-0.5
-        w2 = B(w)+0.5
-        H = Li2(z/u+4) - Li2((z+4)/(u+4)) + Li2(z/(z+4)) - 2*Li2(u/(u+4)) #ok
-        H += Li2(4*w/(u*(z+4))) + Li2(4*z/(u*(w+4))) - Li2(4/(w+4)) * np.pi**2/6 #ok
-        H += 2*np.log(z1)*np.log(z2) - 4*np.log(u1)*np.log(u2) - np.log(z)**2 + np.log(z+4)**2 - np.log(1+4/w)*np.log(u+4) #ok
-        H += - np.log(4*w)*np.log(z+4) + np.log(16)*np.log(u+4)-np.log(u+4)**2 + 2*np.log(u)**2 #ok
-        H += np.log(u)*np.log((z+4)/4 * (w+4)/(4*w)) - np.log(z)*np.log((z+4)/4 * u/w) #ok
-
-        Jplus1 = 2*Li2(1/z2) - Li2(y) + np.log(z1) * np.log(z2/z1) #ok
-        Jplus2 = Li2(u1/z1) - Li2(u2/z2) + Li2(z1/(z1+u2)) - Li2(z2/(z2+u1)) + np.log(u1/z1) * np.log(1-u1/z1) #ok
-        Jplus2 += -np.log(u2/z2)*np.log(1-u2/z2) + np.log(z2/z1) * np.log(u*(z1+u2)) #ok
-        Jplus = Jplus1 + Jplus2
-        Iplus = Li2(u1/w1) - Li2(u2/w2) - 2*Li2(w1/w2) + Li2(w1/(w1+u2)) #ok
-        Iplus += -Li2(w2/(w2+u1)) + np.pi**2 / 3 + np.log(w2/w1)*np.log((w1+u2)/w2 * u/z) #ok
-        Iplus += np.log(u1/w1)*np.log(1-u1/w1) - np.log(u2/w2)*np.log(1-u2/w2) #ok
-        #####
-        term3 = (7/9 + 8/45*z + 7/18*z*theta)*H - (16/45*z + 38/45 + 16/(45*z) + (7/9*z+4/9)*theta)*B(z)*Jplus #ok
-        term3 += (-16/45*z - 14/9 - 8/(9*w) + 2/45*z/w - 4/5*z/w**2 + 2*z/(3*(w+4)) - (7/9*z+4/9*z/w)*theta)*B(w)*Iplus #ok
-        term3 += (32/45*u/w - 88/(45*z) - 16/(45*w) + 8/5*z/w**2 + 8/9*u/w*theta)*B(u)*np.log(u2/u1) #ok 
-        term3 += (68/45 - 16/(45*z) + 8/(3*w) - 2/3*z/w - 8/9*theta)*B(z)*np.log(z2/z1) + 104/(45*z) #ok
-        term3 += -8/(15*w) - 62/27 - (8/(9*w) +1/45*z/w + 4/5*z/w**2 + 4/9*z/w*theta)*np.log(z)#ok
-        term3 += (1 + 0.5*z*theta)*1/(3*w)*(np.log(u2/u1)**2 - np.log(z2/z1)**2) #ok
-        term3 += (8/z + z*theta) * B(z)/(3*(z+4)) - (2*Jplus2 + np.log(z2)**2 - np.log(z1)**2) #ok
-        cs = factor*(term1 * np.log(2*eps/me) + term2 + term3)
-        return cs
-'''
-
-
 if __name__ == "__main__":
-    
     pass
+
+
+
+
+
+
+
+
+
+    '''
+    import sympy as sy
+
+    def cs_pair_nuc_nikishov(self, nu, E, Z):
+            alpha, re, me, mu = self.par["alpha"], self.par["re"]*1e-13, self.par["me"]*1e-3, self.par["mu"]*1e-3
+            factor = (2*alpha*re*Z)**2/np.pi * (1-nu)/nu 
+            eps = nu*E
+            theta= (me/mu)**2
+            z = nu**2/(theta*(1-nu))
+            B = lambda v : np.sqrt(1/4 + 1/v) 
+            z1, z2 = B(z)-0.5, B(z)+0.5
+            y = (z1+z2)/z2**2
+            integrand = lambda t : -np.log(1-t)/t 
+            Li2 = lambda x : quad(integrand, 0, x)[0]
+            ###f1 + theta * f3 
+            term1 = 44/(45*z) - 16/45 - 4/9*theta - (7/9 + 8/45 * z + 7/18*z*theta)*np.log(z) #ok
+            term1 += (16/45*z+38/45-44/(45*z) + 4/(3*(z+4)) + (7/9*z - 2/9 + 8/(3*(z+4)))*theta)*B(z)*np.log(z2/z1) #ok
+        
+            ###phi2 + theta*phi4
+            term2 = (7/36 + 2/45*z +7/72*z*theta) * (np.log(z2/z1)**2+np.pi**2+2*np.log(z)**2)#ok
+            term2 += (7/18 + 3/20*z + 7/36*z*theta)*np.log(z) + 653/270 - 28/(9*z) + 2/3*theta #ok
+            term2 += (-3/10*z - 92/45 + 52/(45*z) - (2/9 - 7/18*z)*theta)*B(z)*np.log(z2/z1) #ok
+            term2 += B(z)*(-8/45*z - 19/45 - 8/(45*z) - (2/9 + 7/18*z)*theta)*(Li2(y) + 2*Li2(1/z2) + 3/2*np.log(z2/z1)**2) #ok
+            term2 += (8/z + z*theta)*B(z)/(3*(z+4))*(6*Li2(1/z2)-Li2(y)+0.5*np.log(z2/z1)**2) #ok
+        
+            ###I         
+            ene = sy.Symbol('ene')
+            gamma = ene/mu #P0 / mu
+            gammaprime = gamma.diff(ene)
+            Dgamma = sy.lambdify(ene, gammaprime, 'numpy')
+            s = (2*np.sqrt(E/mu*Dgamma(E))*Z**(1/3))/(183*np.sqrt(np.exp(1)))
+            w = s*np.sqrt(z)
+            u = w + z
+            u1 = B(u)-0.5
+            u2 = B(u)+0.5
+            w1 = B(w)-0.5
+            w2 = B(w)+0.5
+            H = Li2(z/u+4) - Li2((z+4)/(u+4)) + Li2(z/(z+4)) - 2*Li2(u/(u+4)) #ok
+            H += Li2(4*w/(u*(z+4))) + Li2(4*z/(u*(w+4))) - Li2(4/(w+4)) * np.pi**2/6 #ok
+            H += 2*np.log(z1)*np.log(z2) - 4*np.log(u1)*np.log(u2) - np.log(z)**2 + np.log(z+4)**2 - np.log(1+4/w)*np.log(u+4) #ok
+            H += - np.log(4*w)*np.log(z+4) + np.log(16)*np.log(u+4)-np.log(u+4)**2 + 2*np.log(u)**2 #ok
+            H += np.log(u)*np.log((z+4)/4 * (w+4)/(4*w)) - np.log(z)*np.log((z+4)/4 * u/w) #ok
+
+            Jplus1 = 2*Li2(1/z2) - Li2(y) + np.log(z1) * np.log(z2/z1) #ok
+            Jplus2 = Li2(u1/z1) - Li2(u2/z2) + Li2(z1/(z1+u2)) - Li2(z2/(z2+u1)) + np.log(u1/z1) * np.log(1-u1/z1) #ok
+            Jplus2 += -np.log(u2/z2)*np.log(1-u2/z2) + np.log(z2/z1) * np.log(u*(z1+u2)) #ok
+            Jplus = Jplus1 + Jplus2
+            Iplus = Li2(u1/w1) - Li2(u2/w2) - 2*Li2(w1/w2) + Li2(w1/(w1+u2)) #ok
+            Iplus += -Li2(w2/(w2+u1)) + np.pi**2 / 3 + np.log(w2/w1)*np.log((w1+u2)/w2 * u/z) #ok
+            Iplus += np.log(u1/w1)*np.log(1-u1/w1) - np.log(u2/w2)*np.log(1-u2/w2) #ok
+            #####
+            term3 = (7/9 + 8/45*z + 7/18*z*theta)*H - (16/45*z + 38/45 + 16/(45*z) + (7/9*z+4/9)*theta)*B(z)*Jplus #ok
+            term3 += (-16/45*z - 14/9 - 8/(9*w) + 2/45*z/w - 4/5*z/w**2 + 2*z/(3*(w+4)) - (7/9*z+4/9*z/w)*theta)*B(w)*Iplus #ok
+            term3 += (32/45*u/w - 88/(45*z) - 16/(45*w) + 8/5*z/w**2 + 8/9*u/w*theta)*B(u)*np.log(u2/u1) #ok 
+            term3 += (68/45 - 16/(45*z) + 8/(3*w) - 2/3*z/w - 8/9*theta)*B(z)*np.log(z2/z1) + 104/(45*z) #ok
+            term3 += -8/(15*w) - 62/27 - (8/(9*w) +1/45*z/w + 4/5*z/w**2 + 4/9*z/w*theta)*np.log(z)#ok
+            term3 += (1 + 0.5*z*theta)*1/(3*w)*(np.log(u2/u1)**2 - np.log(z2/z1)**2) #ok
+            term3 += (8/z + z*theta) * B(z)/(3*(z+4)) - (2*Jplus2 + np.log(z2)**2 - np.log(z1)**2) #ok
+            cs = factor*(term1 * np.log(2*eps/me) + term2 + term3)
+            return cs
+    '''

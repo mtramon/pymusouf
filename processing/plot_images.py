@@ -4,12 +4,13 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable, inset_locator
 import numpy as np 
 import pandas as pd
 import pickle
-
+from scipy.interpolate import griddata
+from scipy.io import loadmat
 #package modules
-from acceptance.acceptance import GeometricalAcceptance
 from cli import get_common_args
-from data import RawData
-from reco.eventrate import EventRate
+from config import STRUCT_DIR
+from survey import CURRENT_SURVEY
+from eventrate import EventRate
 from utils.common import Common
 from utils.tools import print_file_datetime
 
@@ -28,12 +29,14 @@ params = {'legend.fontsize': 'medium',
         'savefig.dpi':200    }
 plt.rcParams.update(params)
 
+def compute_experimental_acceptance(counts, flux, time):
+    return counts/(flux*time)
 
 def correct_tomo_images(htomo, hcalib, binx=None, biny=None, eps=1e-12):
     m = hcalib != 0 
     htomo[~m] = np.nan
-    htomo[m] /= hcalib[m]
-#    htomo /= (hcalib+eps)
+    # htomo[m] /= hcalib[m]
+    htomo[m] /= (hcalib[m]+eps)
     return htomo
 
 if __name__ == "__main__":
@@ -41,27 +44,25 @@ if __name__ == "__main__":
     args = get_common_args(save=False)
     cmn = Common(args)
     survey = cmn.survey
+    survey_name = survey.name   
+    dir_survey = STRUCT_DIR / survey_name
+    dir_flux = dir_survey / "flux"
     tel = cmn.telescope
     runs = survey.runs[tel.name]
     dict_conf = tel.configurations
     
-    tel.compute_angle_matrix()
-    file_track = cmn.reco_path / "df_track.csv.gz"
+    tel.compute_angular_coordinates()
+
+    file_track = cmn.run.dirs["reco"] / "df_track.csv.gz"
     print_file_datetime(file_track)
-    dir_out = cmn.plot_path
+    dir_out = cmn.run.dirs["png"] 
     df = pd.read_csv(file_track)
     df.set_index("event_id", inplace=True)
     
-    # fig, ax = plt.subplots(layout="compressed")
-    # ax.hist(df["rms"], bins=100)
-    # fout=dir_out/"rms.png"
-    # fig.savefig(fout)
-    # print(f"Save {fout}")
-    # print(len(df.groupby('config')))
     grp_evt_id = df.groupby('event_id')
-    # print(len(grp_evt_id))
     t = grp_evt_id['timestamp'].first().to_numpy()
     er = EventRate(time=t, t0=0)
+    
     fig, ax = plt.subplots(figsize=(12,9))  
     window = 12 if "tomo" in args.run else 3
     _, rate = er.time_series(ax, width=3600, window=window, label="", **{"alpha":1., "linewidth":1, "color":tel.color})
@@ -72,7 +73,7 @@ if __name__ == "__main__":
             f"nev={nev:.2e}", 
             fontsize="xx-large", ha="left",va="bottom", transform=ax.transAxes, # fontweight="bold",
         )
-    fout = cmn.plot_path / f"eventrate.png"
+    fout = dir_out / f"eventrate.png"
     ax.grid(alpha=0.2)
     fig.savefig(fout)
     print(f"Save {fout}")
@@ -91,8 +92,8 @@ if __name__ == "__main__":
             if fin == 1 : mask = mask & (df['inside'] == fin)
             x, y = df["dx_dz"][mask], df["dy_dz"][mask]
             # range_xy = np.array([[min(x), max(x)], [min(y), max(y)]])
-            # if fin == 1: print(range_xy, conf.range_tanthetaxy)
-            range_xy = conf.range_tanthetaxy
+            # if fin == 1: print(range_xy, conf.range_uv)
+            range_xy = conf.range_uv
             # print(range_xy)
             shp = tel.azimuth_matrix[c].shape
             bins = shp #
@@ -101,7 +102,6 @@ if __name__ == "__main__":
             # range_xy = np.arange(-15.5, 16.5)
             # bins = (range_xy * 50) / dz
             # if c == "4p": 
-
             #     x = x + np.random.uniform(-1e-2, 1e-2, size=len(x))
             #     y = y + np.random.uniform(-1e-2, 1e-2, size=len(y))
             h, binx, biny = np.histogram2d(x, y, bins=bins, range=range_xy)
@@ -110,7 +110,7 @@ if __name__ == "__main__":
             vmax= _max if vmax < _max else vmax
             if i == 0 :axs[i,j].set_title(c + " config")
             l_h2d.append((h, binx, biny))
-    fout = cmn.pkl_path / "images_brut.pkl"
+    fout = cmn.run.dirs["pkl"] / "images_brut.pkl"
     with open(fout, 'wb') as f:
         pickle.dump(dict_out, f)
     print(f"Save {fout}")
@@ -140,6 +140,7 @@ if __name__ == "__main__":
     if not "calib" in runs.keys(): exit()
     run_calib = runs.get("calib")
     pkl_calib = run_calib.path / "pkl" / "images_brut.pkl"
+    
     if pkl_calib.exists() and "tomo" in args.run: 
         with open(pkl_calib, 'rb') as f:
             dict_calib = pickle.load(f) 
@@ -173,40 +174,61 @@ if __name__ == "__main__":
                 cb= fig.colorbar(im, cax=cax, extend='max')
                 cb.set_label(f'Entries Norm OS', labelpad=1)
                 cb.ax.tick_params(which="both", labelsize="x-large",pad=1)    
-        fout_png = cmn.plot_path / "images_corr.png"
+        fout_png = dir_out / "images_corr.png"
         fig.savefig(fout_png)
         print(f"Save {fout_png}")
-        fout_pkl = cmn.pkl_path / "images_corr.pkl"
+        fout_pkl = cmn.run.dirs["pkl"] / "images_corr.pkl"
         with open(fout_pkl, 'wb') as f:
             pickle.dump(dict_corr, f)
         print(f"Save {fout_pkl}")
     
-    
     exit()
+    fluxos_file = dir_flux / "openSkyFluxStructure.mat"
+    fluxos_struct = loadmat(str(fluxos_file))["openSkyFluxStructure"][0][0]
+    theta_os_grid = fluxos_struct[0].ravel() * np.pi/180
+    flux_os_grid = fluxos_struct[1].ravel() #
+    theta_os_tel = tel.zenith_os_matrix[conf.name]
+    flux_os_tel = np.interp(theta_os_tel, theta_os_grid, flux_os_grid)
+    print("openSkyFluxStructure:", np.nanmin(flux_os_tel), np.nanmax(flux_os_tel))
 
+    compute_experimental_acceptance(hcalib, flux_os_tel, )
 
+    fluxop_file = dir_flux / 'IntegralFluxVsOpAndZaStructure_Corsika.mat'
+    print_file_datetime(fluxop_file)
+    fluxop_grid = loadmat(str(fluxop_file))['IntegralFluxVsOpAndZaStructure_rock_MuonsEKin_onlyModel'] 
+    opacity_log10 = fluxop_grid[0][0][1] #opacity shape: (bins_ene, bins_op) = (100, 600)
+    opacity_grid = np.exp( np.log(10) * opacity_log10 )
+    theta_grid = fluxop_grid[0][0][0] #zenith angle
+    flux_grid = fluxop_grid[0][0][2] #Corsika flux
+    flux_grid_low = fluxop_grid[0][0][3]
+    flux_grid_up = fluxop_grid[0][0][4]
+    dir_voxel = dir_survey / "voxel" 
+    # file_voxelray = dir_voxel / f"voxel_ray_matrix_{tel.name}_{conf.name}_vox8m.npz"
+    file_ray_length =  dir_voxel / f"ray_length_{tel.name}_{conf.name}_vox4m.npy"
+    raylength = np.load(file_ray_length).reshape(conf.shape_uv)
+    
+    u_edges, v_edges = conf.u_edges, conf.v_edges
+    u,v = (u_edges[:-1] + u_edges[1:]) / 2, (v_edges[:-1] + v_edges[1:]) / 2
+    delta_z = conf.length_z*1e-1 #mm > cm
+    tel.compute_angular_coordinates()
+    theta_tel = tel.zenith_matrix[conf.name]
 
-    ga = GeometricalAcceptance(tel)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize = (ncols*6, 6*nrows), layout="tight", sharex=True, sharey=True)
-    if axs.ndim == 1: axs =axs[np.newaxis].T    
-    for i,(c, conf) in enumerate(dict_conf.items()):   
-        mask = (df['config'] == c)
-        x, y = df["dx_dz"][mask], df["dy_dz"][mask] 
-        shp = tel.azimuth_matrix[c].shape
-        bins = shp #
-        h, binx, biny = np.histogram2d(x, y, bins=bins, range=conf.range_tanthetaxy)
-        dz = conf.length_z
-        acc = ga.angular_acceptance_map(u_edges=binx, v_edges=biny, delta_z=dz, Lx=800, Ly=800)
-        ax = axs[0, i]
-        im = ax.pcolormesh(binx, biny, acc, norm=LogNorm(1e-2, np.max(acc)))#, norm=LogNorm(1, vmax))
-        h_corr = ga.correct_histogram(h, u_edges=binx, v_edges=biny, delta_z=dz, Lx=800, Ly=800)
-        ax = axs[1, i]
-        im = ax.pcolormesh(binx, biny, h_corr, cmap="coolwarm", norm=LogNorm(np.min(h_corr), np.max(h_corr)))#, norm=LogNorm(1, vmax))
-        # divider = make_axes_locatable(ax)
-        # cax = divider.append_axes("right", size="5%", pad=0.1)
-        # cb= fig.colorbar(im, cax=cax, extend='max')
-        # cb.set_label(f'Acceptance', labelpad=5)
+    mask = (raylength > 1) & (theta_tel <= np.pi/2)
+    opacity_tel = np.zeros_like(raylength) 
+    opacity_tel[mask] = 2.65 * (raylength[mask])
 
-    file_out = dir_out / "geom_acc.png"
-    fig.savefig(file_out)
-    print(f"Save {file_out}")
+    X,Y, values = theta_grid.ravel(), opacity_grid.ravel(), flux_grid.ravel()
+    points = np.vstack((X.ravel(), Y.ravel())).T
+
+    xi = np.vstack((theta_tel.ravel(), opacity_tel.ravel())).T
+    nu, nv = len(u_edges)-1, len(v_edges)-1
+    flux_tel = griddata(points, values, xi=xi, method='linear').reshape(nu, nv) # 1 / [cm^2.sr.s]
+    flux_tel[~mask] = np.nan
+    fig, ax = plt.subplots()
+    im = ax.pcolormesh(u, v, flux_tel, norm=LogNorm(np.nanmin(flux_tel),np.nanmax(flux_tel)))
+    cb = fig.colorbar(im)
+    cb.set_label("Integral Flux (cm$^2$ sr s)$^{-1}$")
+    fout_png= f"{fluxop_file.stem}_{tel.name}_{conf.name}.png"
+    fig.savefig(fout_png)
+    print(f"Saved {fout_png}")
+    

@@ -80,7 +80,7 @@ def refine_voxel(x, y, z, vs, topo, tol_z, vz_min, voxels):
 # ----------------------------
 dir_dem = Path("/Users/raphael/pymusouf/struct_link/soufriere/dem")
 input_vts = dir_dem / "topo_roi.vts"
-vs = float(sys.argv[1]) if len(sys.argv) > 1 else 64  # in m
+vs = int(sys.argv[1]) if len(sys.argv) > 1 else 64  # in m
 print(f"Voxel size : {vs} m")
 # ----------------------------
 # Lecture surface topo

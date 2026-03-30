@@ -5,5 +5,9 @@ The repository contains Python packages to reconstruct and analyze muography dat
 
 The detectors used in this study are scintillator-based hodoscopes named "telescopes" developed in IP2I, Lyon. 
 The data processed by this package were acquired in the framework of the ANR DIAPHANE and ANR MEGAMU projects.  
-  
-First the ```CURRENT_SURVEY``` variable needs to be edited in the ```survey/survey.py``` module, either with ```soufriere``` or ```copahue```. Then, the package needs to be compiled, check ```INSTALL``` file.
+
+### Reconstruction: Muons tracking in raw data
+See ```processing/``` 
+
+### 3D Modeling
+See ```inversion/``` 

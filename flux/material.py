@@ -1,10 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Union
+import argparse
 
 @dataclass 
 class Material:
@@ -13,8 +14,8 @@ class Material:
     Z: float
     rho: float
     I : float
-    fraction:float=field(init=False)
-    weight:float=field(init=False)
+    fraction:float=field(default=1)
+    weight:float=field(default=1)
     def __post_init__(self):
         self.Z_A = self.Z/self.A
         self.plasma_energy = 28.816 * np.sqrt(self.rho*self.Z_A)
@@ -34,8 +35,8 @@ class Element:
     Z: float
     rho: float
     I : float
-    fraction:float=field(init=False)
-    weight:float=field(init=False)
+    fraction:float=field(default=1)
+    weight:float=field(default=1)
     def __post_init__(self):
         self.Z_A = self.Z/self.A
         self.plasma_energy = 28.816 * np.sqrt(self.rho*self.Z_A)
@@ -186,15 +187,34 @@ Andesite.Z_A = 0.4960 #Lechmann 2018
 Andesite.I = 147.77 #Lechmann 2018
 Granite = RockMedium(name="granite", materials=[Qtz,Or,Ab,Phl,Ann,Mg_Hbl,Fe_Hbl], fractions=np.array([36.1, 28.1,27.3,2.95,2.95,2.25,2.25])*0.01) #Lechmann2018
 
-
 Rock.I = 136.40 #Lechmann 2018
 
 #sedimentary rocks
 Cal = Mineral(name="calcite", elements=[Ca,C,O], coefs=[1,1,3], rho=2.71)
 Limestone = Cal
 
-fout="/Users/raphael/simu/analysis/materials.json"
-dict_materials = {Rock.name:Rock,Water.name:Water}
+DICT_MEDIUM = {"rock":Rock, 
+               "water": Water, 
+               "limestone":Limestone}
+
+def str2medium(v):
+    '''
+    Convert 'str' to 'Telescope' or 'Bench' object type
+    '''
+   
+    if isinstance(v, RockMedium) or isinstance(v, Material) or isinstance(v, Mineral):
+       return v
+
+    if v in list(DICT_MEDIUM.keys()):
+        return DICT_MEDIUM[v]
+    elif v in [ k.lower() for k in list(DICT_MEDIUM.keys())]:
+        return DICT_MEDIUM[v.upper()]
+    elif v in [k.lower() if i==0 else k for i, k in enumerate(list(DICT_MEDIUM.keys()))]:
+        return DICT_MEDIUM[v[0].upper()+v[1:]]
+    else:
+    
+        raise argparse.ArgumentTypeError(f'Input medium {v} does not exist.')
+
 
 if __name__=="__main__":
     #print(Air)
