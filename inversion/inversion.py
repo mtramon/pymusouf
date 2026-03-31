@@ -164,8 +164,6 @@ class Inversion:
 if __name__ == "__main__":
 
     survey_name = CURRENT_SURVEY.name   
-    print(f"Processing survey: {survey_name}")
-    print(f"Survey structure directory: {STRUCT_DIR / survey_name}")
     dir_survey = STRUCT_DIR / survey_name
     dir_dem = dir_survey / "dem"
     dir_voxel = dir_survey / "voxel"

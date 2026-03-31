@@ -134,7 +134,6 @@ class InversionTV:
         Dx = sp.coo_matrix((vals_x, (rows_x, cols_x)), shape=(N, N)).tocsr()
         Dy = sp.coo_matrix((vals_y, (rows_y, cols_y)), shape=(N, N)).tocsr()
         Dz = sp.coo_matrix((vals_z, (rows_z, cols_z)), shape=(N, N)).tocsr()
-
         return Dx, Dy, Dz
 
     def _estimate_lipschitz(self, power_iter=20, mu=0, mu_z=0):
@@ -148,7 +147,7 @@ class InversionTV:
                 y += mu * x
             ##Damping vertical
             if mu_z > 0:
-                # Terme vertical : tau * Dz.T @ (weight_z * (Dz @ x))
+                # Terme vertical : mu_z * Dz.T @ (weight_z * (Dz @ x))
                 Dzx = self.Dz @ x
                 wDzx = self.weights * Dzx
                 y += mu_z * (self.Dz.T @ wDzx)
@@ -168,7 +167,6 @@ class InversionTV:
         # Initialiser les variables duales p, q, r (pour chaque direction)
         p = np.zeros((n, 3))
         tau = 0.25  # pas pour la convergence
-
         for _ in range(n_iter):
             # Divergence de p
             div_p = self.Dx.T @ p[:,0] + self.Dy.T @ p[:,1] + self.Dz.T @ p[:,2]
@@ -322,9 +320,9 @@ if __name__ == "__main__":
     dir_inv = dir_model / "inversion"
     dir_inv.mkdir(parents=True, exist_ok=True)
     vs = int(sys.argv[1]) if len(sys.argv) >1 else 32  # voxel size in m (edge length)
-    # input_vtk = dir_model / f"ElecCond_topo_voi_vox{vs}m.vts"
+    input_vtk = dir_model / f"ElecCond_topo_voi_vox{vs}m.vts"
 
-    input_vtk = dir_voxel / f"topo_center_anom_voi_vox{vs}m.vts"
+    # input_vtk = dir_voxel / f"topo_center_anom_voi_vox{vs}m.vts"
     print_file_datetime(input_vtk)
     
     grid, geom = load_voxel_grid(input_vtk)
@@ -332,13 +330,10 @@ if __name__ == "__main__":
     print(np.count_nonzero(mask_voi))
     voxel_density  = geom.density
     nvox = len(mask_voi)
-    rho0 = 1800 # in kg/m^3
-    D_0 = rho0 * np.ones(nvox, dtype=np.float64)  # density vector in kg/m^3
-    D_0 = D_0 * mask_voi
-    D_1 = voxel_density * mask_voi 
-    # print(check_array_order(D_1) )
-    if D_1.max() < 1e3: 
-        D_1 *= 1e3 # if density is in g/cm^3, convert to kg/m^3
+    rho_true_voi = voxel_density * mask_voi 
+    # print(check_array_order(rho_true_voi) )
+    if rho_true_voi.max() < 1e3: 
+        rho_true_voi *= 1e3 # if density is in g/cm^3, convert to kg/m^3
     dtel = CURRENT_SURVEY.telescope
     r, c = 0, 0
     data_concat = None
@@ -356,6 +351,11 @@ if __name__ == "__main__":
 
     h5_path = dir_voxel / f"{basename}_voxel_ray_matrices_vox{vs}m.h5"
     str_tel_type = basename.split("_")[0]
+
+    str_reg_type = "tv"
+    file_out_npy = dir_inv / f"{input_vtk.stem}_{str_reg_type}_{str_tel_type}.npz"
+    basename_out = file_out_npy.stem
+
     with h5py.File(h5_path) as fh5 : 
         for tel_name, tel in tqdm(dtel.items(), desc="Data"):
             tel.compute_angular_coordinates()
@@ -386,7 +386,7 @@ if __name__ == "__main__":
                 # M_norm = M.multiply(1.0 / (rays_length[:, None] * G_uv[:, None]))
                 M_norm = M.multiply(1.0 / G_uv[:, None])
                 # print(f"{tel_name}, {conf_name}: min, max M_norm.sum( axis=1)) = {np.min(M_norm.sum( axis=1)):.3e}, {np.max(M_norm.sum( axis=1)):.3e}")
-                opacity[mask_rays] = M_norm.dot(D_1) [mask_rays] #/ G_uv [mask_rays]
+                opacity[mask_rays] = M_norm.dot(rho_true_voi) [mask_rays] #/ G_uv [mask_rays]
                 mask_rays = mask_rays & (opacity > 1e3)
                 mean_opacity, std_opacity = np.mean(opacity), np.std(opacity)
                 unc = np.zeros_like(opacity)
@@ -456,7 +456,6 @@ if __name__ == "__main__":
 
     M_concat = M_concat[opaque][:, active]
     nvox_active = len(active)
-    str_reg_type = "tv"
 
 
     #### PONDERATION DES VOXELS
@@ -507,17 +506,44 @@ if __name__ == "__main__":
     wz = np.zeros_like(s)
 
     s = sensitivity[_active]
+    fig, ax = plt.subplots()
+    x = sensitivity[sensitivity>0]
+    vmin, vmax= np.min(x), np.max(x)
+    print("sensitivity: \nmin, max:", vmin, vmax)
+    logbins = np.logspace(start=np.log10(vmin), stop=np.log10(vmax), num=100)
+    h,e= np.histogram(x, bins=logbins,)
+    bc, w = (e[:-1]+e[1:])/2, abs(e[:-1]-e[1:])
+    ax.bar(bc,  h, w )#label = f"$\\lambda_r$ = {l:.3e}\nmean={mean_post[i]:.3e}")
+    ax.set_xscale("log")
+    ax.set_xlabel("Sensitivity")
+    ax.set_ylabel("Voxels")
+    sthresh = np.percentile(sensitivity[_active], 10)
+    sthresh = max(sthresh, 1e-3)
+    ax.axvline(sthresh, color='red', linestyle='--', label=f"Sensitivity threshold = {sthresh:.3e}")
+    fout_png = dir_inv / f"{basename_out}_sensitivity.png"
+    fig.savefig(fout_png)
+    print(f"Saved {fout_png}")
     s = s / np.max(s)
-    sthresh = np.percentile(sensitivity[_active], 50)
-    beta = 2
+    beta = 0.5
     mask_slow = (s < sthresh)
-    wz[mask_slow] = (1 - s[mask_slow])**beta
+    # wz[mask_slow] = (1 - s[mask_slow])**beta
+    s0 = sthresh
+    gamma = 4
+    wz = 1 / (1 + (s / s0)**gamma)
+
+    print(np.count_nonzero(mask_slow), len(mask_slow))
 
     # normalisation (important)
     # wz = wz / (wz.max() + 1e-8)
-    wz = None
 
-    rho_1 = np.median(D_1[active])
+
+    fig,ax= plt.subplots()
+    idx_s = np.argsort(s)
+    ax.plot(s[idx_s],wz[idx_s])
+    ax.set_xscale("log")
+    # ax.set_yscale("log")
+    fig.savefig(dir_inv/"weights_z.png", dpi=300)
+    rho_1 = np.median(rho_true_voi[active])
    
     tv = InversionTV(
         M=M_concat,
@@ -599,7 +625,6 @@ if __name__ == "__main__":
     # depth_vtk.SetName(f"depth_voxels")
     # model_grid.GetCellData().AddArray(depth_vtk)
 
-    file_out_npy = dir_inv / f"{input_vtk.stem}_{str_reg_type}_{str_tel_type}.npz"
     # '''
 
     nlr, nmu = 10, 1
@@ -610,8 +635,9 @@ if __name__ == "__main__":
     regularizations = np.zeros((ntot, nvox))
     misfits_data, misfits_model = np.zeros(ntot), np.zeros(ntot)
     c = 0 
-    mu, mu_z = 0, 0.99
-    rho_min, rho_max = min(D_1[active]), max(D_1[active])
+    # mu, mu_z = 0, 0.99
+    mu_z = 0.5
+    rho_min, rho_max = min(rho_true_voi[active]), max(rho_true_voi[active])
     rho_init = np.ones(active.shape)*rho_1
     for i, lr in tqdm(enumerate(lambda_reg), total=nlr, desc='Modeling'):  
         for j, mu in enumerate(mu_damp): 
@@ -638,7 +664,7 @@ if __name__ == "__main__":
         f"density_lambda_{lambda_reg[0]:.3e}"
     )
     np.savez_compressed(file_out_npy,
-                density_true = D_1, 
+                density_true = rho_true_voi, 
                 density_post = models,
                 misfits=np.asarray((misfits_data, misfits_model)),
                 ndata = ndata,
@@ -650,7 +676,6 @@ if __name__ == "__main__":
             )
     print(f"Saved npy {file_out_npy}")
     # '''
-    basename_out = file_out_npy.stem
     # file_out_vts = dir_inv / f"{basename_out}_{kernel[:4]}reg_l{int(length)}m_lambda_series.vts"
     file_out_vts = dir_inv / f"{basename_out}.vts"
     writer = vtk.vtkXMLStructuredGridWriter()

@@ -7,7 +7,7 @@ The detectors used in this study are scintillator-based hodoscopes named "telesc
 The data processed by this package were acquired in the framework of the ANR DIAPHANE and ANR MEGAMU projects.  
 
 ### Reconstruction: Muons tracking in raw data
-See ```processing/``` 
+See ```processing/README.md``` 
 
 ### 3D Modeling
 See ```inversion/``` 

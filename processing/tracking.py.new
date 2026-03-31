@@ -782,7 +782,7 @@ class RansacTracking(Tracking):
                     (pts[:, 0] >= 0) & (pts[:, 0] <= 800) &
                     (pts[:, 1] >= 0) & (pts[:, 1] <= 800)
                 )
-            )
+            ) #check if all intersection points are contained in telescope panels 
             rows.append((
                         evt.id,
                         int(evt.timestamp.s),

@@ -38,15 +38,15 @@ def set_processing_parser():
 
 def set_ransac_args(parser, saved_args={}):
     parser.add_argument('--residual_threshold', '-rt', 
-                        default=saved_args.get("residual_threshold", 50), 
-                        help="Distance-to-model parameter in mm",
+                        default=saved_args.get("residual_threshold", 1), 
+                        help="Distance-to-model parameter in pixel unit",
                         type=float)
     parser.add_argument('--min_samples', '-ms', 
-                        default=saved_args.get("min_samples",2), 
+                        default=saved_args.get("min_samples", 2), 
                         help='Size of the initial sample',
                         type=int)
     parser.add_argument('--max_trials', '-mt', 
-                        default=saved_args.get("max_trials",100), 
+                        default=saved_args.get("max_trials", 30), 
                         help='Number of iterations',
                         type=int)    
 

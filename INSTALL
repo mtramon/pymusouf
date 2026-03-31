@@ -1,23 +1,165 @@
-1. First steps
+# Path settings
 - Edit global paths to data and terrain structure in ```config/config.yaml``` 
 - Edit ```CURRENT_SURVEY```  in the ```survey/survey.py``` module (either ```soufriere``` or ```copahue```, default is ```soufriere```). 
 
-2. Compilation and installation
-Check ```INSTALL``` file.
+# Installation Guide for the Tomomu Muography Processing Package
 
-To install the package, make sure you have Python v3.7 or higher installed.  
+This package requires **Python 3.10 or higher**.
 
-In the current package directory, first create a virtual environment, running: 
-    $python3 -m venv .venv     #N.B ‘.venv’ generic hidden directory name
+---
 
-Activate the virtual environment:  
-    $source .venv/bin/activate
+## 1. Create a Virtual Environment
 
-Then, to install the package with its requirements do:  
-    $python3 -m pip install .  
+It is strongly recommended to install and run the package inside a Python virtual environment to avoid dependency conflicts.
 
-Later, to exit the virtual environment, simply do:  
-    $deactivate  
+### Linux / macOS
 
-For each source package modification, run again: 
-    $python3 -m pip install .  
+In your working directory, create a virtual environment:
+
+```bash
+python3 -m venv .venv
+```
+
+> **Note:** `.venv` is a generic name for the hidden directory where the virtual environment will be created.
+
+### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+```
+
+---
+
+## 2. Activate the Virtual Environment
+
+### Linux / macOS
+
+```bash
+source .venv/bin/activate
+```
+
+Once activated, your shell prompt should show the environment name, e.g. `(venv)`.
+
+### Windows (PowerShell)
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+> If you see an execution policy error, run PowerShell as administrator and enable script execution temporarily:
+>
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+> ```
+
+---
+
+## 3. Install the Package and Its Dependencies
+
+Install the package using `pip`:
+
+```bash
+python -m pip install /path/to/pytomomu
+```
+
+Replace `/path/to/pytomomu` with the local path to the package source directory.
+
+> **Tip:**
+> Run this command again after modifying the package source code to update the installation.
+
+---
+
+## 4. Deactivate the Virtual Environment
+
+When you are done working, deactivate the environment with:
+
+```bash
+deactivate
+```
+
+---
+
+## 5. (Optional) Install from a Requirements File
+
+If a `requirements.txt` file is provided, you can install all dependencies at once:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+---
+
+## 6. Verify the Installation
+
+To check that the package is correctly installed, try importing it in Python:
+
+```bash
+python
+>>> import pytomomu
+>>> print(pytomomu.__version__)
+```
+
+If no error appears, the installation was successful.
+
+---
+
+## 7. Troubleshooting
+
+Here are some common installation issues and how to fix them:
+
+### ❌ `python: command not found` or `python3: command not found`
+
+Python is not installed or not in your system path.
+→ Install Python 3.9 or higher from [https://www.python.org/downloads/](https://www.python.org/downloads/)
+→ On Linux: `sudo apt install python3 python3-venv python3-pip`
+
+---
+
+### ❌ `No module named venv`
+
+Your Python installation is missing the `venv` module.
+→ On Ubuntu/Debian: `sudo apt install python3-venv`
+
+---
+
+### ❌ `pip: command not found`
+
+`pip` is not installed.
+→ Install it with `python -m ensurepip --upgrade`
+
+---
+
+### ❌ Permission denied / installation fails globally
+
+You might be trying to install outside a virtual environment.
+→ Always activate your virtual environment before running `pip install`.
+→ Check that your prompt shows `(.venv)`.
+
+---
+
+### ❌ `ImportError: No module named pytomomu`
+
+The package is not properly installed or the environment is not active.
+→ Reactivate your environment (`source .venv/bin/activate` or `.venv\Scripts\Activate.ps1`)
+→ Reinstall with `python -m pip install /path/to/pytomomu`
+
+---
+
+### ❌ PowerShell execution policy error on Windows
+
+If activation fails with a message like *“running scripts is disabled on this system”*, temporarily enable script execution:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
+```
+
+---
+
+### ❌ Mac/Linux library errors (e.g. `libstdc++` not found)
+
+These usually occur when system libraries are missing.
+→ Update your system packages or reinstall Python using a package manager like `brew` or `apt`.
+
+---
+
+If problems persist, verify your Python version and virtual environment setup, or contact the Tomomu development team.

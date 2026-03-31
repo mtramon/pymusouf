@@ -109,20 +109,20 @@ def load_dem_grid(vtkfile):
     # print(f"Reshape -- {time.time()-t0:.2f}")
 
     # voxel mask = all 8 corners positive
-    # mask_voxel_3d = (
-    #     (elevation_3d[:-1, :-1, :-1] > 0) &
-    #     (elevation_3d[1:,  :-1, :-1] > 0) &
-    #     (elevation_3d[:-1, 1:,  :-1] > 0) &
-    #     (elevation_3d[1:,  1:,  :-1] > 0) &
-    #     (elevation_3d[:-1, :-1, 1:] > 0) &
-    #     (elevation_3d[1:,  :-1, 1:] > 0) &
-    #     (elevation_3d[:-1, 1:,  1:] > 0) &
-    #     (elevation_3d[1:,  1:,  1:] > 0)
-    # )
+    mask_voxel_3d = (
+        (elevation_3d[:-1, :-1, :-1] > 0) &
+        (elevation_3d[1:,  :-1, :-1] > 0) &
+        (elevation_3d[:-1, 1:,  :-1] > 0) &
+        (elevation_3d[1:,  1:,  :-1] > 0) &
+        (elevation_3d[:-1, :-1, 1:] > 0) &
+        (elevation_3d[1:,  :-1, 1:] > 0) &
+        (elevation_3d[:-1, 1:,  1:] > 0) &
+        (elevation_3d[1:,  1:,  1:] > 0)
+    )
     # print(f"Mask -- {time.time()-t0:.2f}")
-    # mask_voxel = mask_voxel_3d.ravel(order="F").astype(np.uint8)
-    mask_voxel = (elevation > 0).astype(np.uint8)
-    print(check_array_order(mask_voxel))
+    mask_voxel = mask_voxel_3d.ravel(order="F").astype(np.uint8)
+    # mask_voxel = (elevation > 0).astype(np.uint8)
+    # print(check_array_order(mask_voxel))
     # --- Extract edges ---
     # pts = grid.GetPoints()
     # pts = np.array([pts.GetPoint(i) for i in range(pts.GetNumberOfPoints())])

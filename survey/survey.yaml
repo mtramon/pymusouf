@@ -1,6 +1,6 @@
 
 soufriere: 
-  dem: /Users/raphael/structure/soufriere/dem/topo_roi.npy
+  dem: /Users/raphael/structure/soufriere/dem/topo_roi.vts
   telescope:
     SB: 
       run:
@@ -15,7 +15,8 @@ soufriere:
     
     SXF: 
       run:
-        tomo: /Users/raphael/data/SXF/2023/27aug2023-12oct2023 
+        tomo: /Users/raphael/data/SXF/tomo/2023/27aug2023-12oct2023 
+        calib: /Users/raphael/data/SXF/calib/SXF_FD30A_TomoZen00_CALIB1_ABoff
     
     BR: 
       run:
@@ -29,7 +30,8 @@ soufriere:
   
     SBR: 
       run:
-        tomo: /Users/raphael/data/SBR/2023
+        tomo: /Users/raphael/data/SBR/tomo/2023
+        calib: /Users/raphael/data/SBR/calib/SBR_RF_TomoZen00_CALIB1_ABoff
 
     OM: 
       run:
@@ -38,10 +40,9 @@ soufriere:
        
 
 copahue: 
-  dem: ../files/copahue/dem/copahue_surface_5m.npy
+  dem: /Users/raphael/structure/copahue/dem/copahue_surface_5m.npy
   telescope:
     COP:
       run:
         tomo: 
-      raypath: 
-      flux: 
+        calib: 

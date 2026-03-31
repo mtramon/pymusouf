@@ -63,7 +63,7 @@ if __name__ == "__main__":
     dir_model = dir_survey / "model"
     vs = int(sys.argv[1]) if len(sys.argv) > 1 else 32  # voxel size in m (edge length)
 
-    dir_out = dir_model / "test"
+    dir_out = dir_model / "inversion"
     dir_out.mkdir(parents=True, exist_ok=True)
     # fin = dir_out / f"density_models_vox{vs}m.npz"
     fin = Path(__file__).parent / f"results.npz"

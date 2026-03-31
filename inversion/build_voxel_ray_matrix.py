@@ -16,7 +16,8 @@ import vtk
 from config import STRUCT_DIR
 from survey import CURRENT_SURVEY
 from utils.tools import print_file_datetime
-from voxelgrid import load_voxel_grid
+try: from .voxelgrid import load_voxel_grid
+except: from voxelgrid import load_voxel_grid
 # from telescope import DICT_TEL
 
 

@@ -7,15 +7,16 @@ import pandas as pd
 import pickle
 from scipy.interpolate import griddata
 from scipy.io import loadmat
-import tqdm
+from tqdm import tqdm
 #package modules
 from acceptance.acceptance import geometrical_acceptance
 from cli import get_common_args
 from config import DATA_DIR,STRUCT_DIR
-from eventrate import EventRate
+from telescope import DICT_TEL
 from utils.common import Common
 from utils.tools import print_file_datetime
 from survey.run import RunTomo
+from raylength.func import load_from_hdf5
 
 params = {'legend.fontsize': 'medium',
           'legend.title_fontsize' : 'x-large',
@@ -89,10 +90,13 @@ def compute_integral_flux(counts, acceptance, duration, eps=1e-12):
 
 def process_configuration_tomo(h5file, tel, run, conf, acceptance, points, values, counts, duration, rays_length):
     flux = compute_integral_flux(counts, acceptance, duration) # 1 / [cm^2.sr.s]
+    flux_min, flux_max = np.nanmin(points[:, 1]), np.nanmax(points[:, 1])
+    flux = np.clip(flux, flux_min, flux_max)
     theta = tel.zenith_matrix[conf.name]
     xi = np.vstack((theta.ravel(), flux.ravel())).T
     opacity = griddata(points, values, xi=xi, method='linear') # mwe = hg/cm^2
     mean_density = np.zeros_like(opacity)
+    rays_length = rays_length.reshape(conf.shape_uv).T.ravel()
     if rays_length is not None: 
         m = rays_length > 1e1
         mean_density[m] = opacity[m] / rays_length[m]
@@ -104,7 +108,7 @@ def process_configuration_tomo(h5file, tel, run, conf, acceptance, points, value
                     conf,
                     **d,)
 
-def process_tomo(h5file, tel, run, acceptance, dirs, summed_counts, summed_durations, rays_length):
+def process_tomo(h5file, tel, run, acceptance, dirs, summed_counts, summed_durations, h5file_raylength):
     fluxop_file= dirs["structure"]["flux"] / "IntegralFluxVsOpAndZaStructure_Corsika.mat"
     fluxop_struct = loadmat(str(fluxop_file))['IntegralFluxVsOpAndZaStructure_rock_MuonsEKin_onlyModel'] [0][0]
     theta_grid_tomo = fluxop_struct[0] #zenith angle
@@ -115,13 +119,14 @@ def process_tomo(h5file, tel, run, acceptance, dirs, summed_counts, summed_durat
     X,Y, values = theta_grid_tomo.ravel(), flux_grid_tomo.ravel(), opacity_grid.ravel()
     points = np.vstack((X.ravel(), Y.ravel())).T
     for _, conf in tel.configurations.items():
+        rays_length = load_from_hdf5(h5file_raylength, tel.name, conf.name)
         process_configuration_tomo(
                     h5file, tel, run, conf, 
                     acceptance[conf.name],
                     points, values,
                     summed_counts[conf.name],
                     summed_durations[conf.name], 
-                    rays_length[conf.name],
+                    rays_length,
         )
 
 def compute_experimental_acceptance(tel, conf, counts, duration, theta_grid_os, flux_grid_os):
@@ -162,7 +167,7 @@ def combine_tomo_data(h5file, tel, tomo_runs):
         summed_durations[conf.name] = total_duration
     return summed_counts, summed_durations
 
-def process_telescope(h5file, tel, dirs, rays_length=None):
+def process_telescope(h5file, tel, dirs, raylength):
     tel.compute_angular_coordinates()
     dict_runs = survey.runs[tel.name]
     for _, run in dict_runs.items():
@@ -178,7 +183,7 @@ def process_telescope(h5file, tel, dirs, rays_length=None):
         return
     summed_counts, summed_durations = combine_tomo_data(h5file, tel, tomo_runs)
     combined_run = RunTomo(name="tomo_combined", path=tomo_runs[0].path.parent) if len(tomo_runs) > 1 else tomo_runs[0]
-    process_tomo(h5file, tel, combined_run, acceptance, dirs, summed_counts, summed_durations, rays_length)
+    process_tomo(h5file, tel, combined_run, acceptance, dirs, summed_counts, summed_durations, raylength)
     
 def save_in_hdf5(h5file, tel, run, conf, **kwargs):
     grp_tel = h5file.require_group(tel.name)
@@ -237,16 +242,16 @@ def plot_configuration(axs, h5file, tel, run_name, str_image, mask=None):
         ax.label_outer()
         ax.set_aspect('equal')
 
-def set_mask_rays(voxray, tel):
-    voxray_tel = voxray[tel.name]
-    configurations=tel.configurations.items()
-    mask = {}
-    rays_length = {}
-    for j,(_, conf) in enumerate(configurations):
-        rl = np.array(voxray_tel[conf.name]["rays_length"])
-        mask[conf.name] = (1e1 < rl ) #& (rays_length <= 1e3)
-        rays_length[conf.name] = rl 
-    return mask, rays_length
+# def set_mask_rays(voxray, tel):
+#     voxray_tel = voxray[tel.name]
+#     configurations=tel.configurations.items()
+#     mask = {}
+#     rays_length = {}
+#     for j,(_, conf) in enumerate(configurations):
+#         rl = np.array(voxray_tel[conf.name]["rays_length"])
+#         mask[conf.name] = (1e1 < rl ) #& (rays_length <= 1e3)
+#         rays_length[conf.name] = rl 
+#     return mask, rays_length
 
 if __name__ == "__main__":
 
@@ -258,38 +263,42 @@ if __name__ == "__main__":
     dirs = {
         "structure":{
                 "voxel": struct_dir/"voxel",
+                "tel": struct_dir/"telescope",
                 "flux": struct_dir/"flux",
             },
        "data":  DATA_DIR,
         }   
 
-    dtel = {"SNJ": tel}
+    # dtel = {"SNJ": DICT_TEL["SNJ"]}
     runs = survey.runs[tel.name]
-    h5file_im = dirs["data"] / tel.name / f"images.h5"
 
     mask_rays = None
-    h5file_voxray = dirs["structure"]["voxel"] / f"real_telescopes_voxel_ray_matrices_vox4m.h5"
-    with h5py.File(h5file_voxray) as fvr: 
-        mask_rays, rays_length = set_mask_rays(fvr, tel)
+    # h5file_voxray = dirs["structure"]["voxel"] / f"real_telescopes_voxel_ray_matrices_vox4m.h5"
+    # with h5py.File(h5file_voxray) as fvr: 
+    #     mask_rays, rays_length = set_mask_rays(fvr, tel)
 
-    with h5py.File(h5file_im, "w") as file:
-        # for i, tel in tqdm(enumerate(dtel.values()), total=len(dtel), desc="Progress"):
-        process_telescope(
-            file,
-            tel,
-            dirs, 
-            rays_length
-            )
-    print(f"Saved {h5file_im}")
+    h5file_muo = dirs["data"] / tel.name / f"muography.h5"
+    h5file_raylength = dirs["structure"]["tel"] / f"topo_roi_real_telescopes_rays_length.h5"
+    print_file_datetime(h5file_raylength)
+    with h5py.File(h5file_muo, "w") as file_muo:
+        with h5py.File(h5file_raylength, "r") as file_raylength: 
+            # for i, tel in tqdm(enumerate(dtel.values()), total=len(dtel), desc="Telescopes"):
+            process_telescope(
+                file_muo,
+                tel,
+                dirs, 
+                file_raylength
+                )
+    print(f"Saved {h5file_muo}")
 
     ###Test read h5file
     ncols,nrows = len(tel.configurations),1
     
     run_calib=runs.get('calib')
-    with h5py.File(h5file_im) as fim: 
+    with h5py.File(h5file_muo, "r") as fmuo: 
         for str_image in ["counts","acceptance"]:
             fig, axs = plt.subplots(ncols=ncols,nrows=nrows, figsize=(6*ncols, 6*nrows), sharex=True, sharey=True)#constrained_layout=True)
-            plot_configuration(axs, fim, tel, run_calib.name, str_image)
+            plot_configuration(axs, fmuo, tel, run_calib.name, str_image)
             fout_png = run_calib.dirs["png"] / str(str_image+".png")
             fig.savefig(fout_png)
             print(f"Saved {fout_png}")
@@ -297,10 +306,11 @@ if __name__ == "__main__":
 
 
     run_tomo = runs.get('tomo')
-    with h5py.File(h5file_im) as fim: 
+    print_file_datetime(h5file_muo)
+    with h5py.File(h5file_muo) as fmuo: 
         for str_image in ["counts","flux","opacity","rays_length","mean_density"]:
             fig, axs = plt.subplots(ncols=ncols,nrows=nrows, figsize=(6*ncols, 6*nrows), sharex=True, sharey=True)#constrained_layout=True)
-            plot_configuration(axs, fim, tel, run_tomo.name, str_image, None)
+            plot_configuration(axs, fmuo, tel, run_tomo.name, str_image, None)
             fout_png = run_tomo.dirs["png"] / str(str_image+".png")
             fig.savefig(fout_png)
             print(f"Saved {fout_png}")

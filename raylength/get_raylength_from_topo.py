@@ -1,17 +1,13 @@
 import h5py
-from mpl_toolkits.axes_grid1 import inset_locator
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm, Normalize
 import numpy as np
-from pathlib import Path
 from tqdm import tqdm
 import vtk
 # package module(s)
 from config import STRUCT_DIR
 from survey import CURRENT_SURVEY
-from utils.tools import print_file_datetime, check_array_order
-from voxelgrid import load_voxel_grid, load_dem_grid
-from build_voxel_ray_matrix import generate_rays, filter_rays
+from inversion.build_voxel_ray_matrix import generate_rays, filter_rays
+from func import save_rays_length_hdf5, plot_configuration, load_from_hdf5
 
 def make_inside_function_voi(geom):
     mask = geom.mask_voxel
@@ -32,43 +28,97 @@ def make_inside_function_voi(geom):
 
     return inside
 
-def compute_ray_length(origin, direction, inside_fn, max_dist, ds=2.0):
+from scipy.interpolate import RegularGridInterpolator
+
+from vtk.util.numpy_support import vtk_to_numpy
+
+def extract_topo_from_2d_grid(grid):
+
+    dims = [0, 0, 0]
+    grid.GetDimensions(dims)
+    nx, ny, nz = dims
+
+    assert nz == 1, "La grille doit être 2D (nz=1)"
+
+    pts = vtk_to_numpy(grid.GetPoints().GetData())
+    pts = pts.reshape((nx, ny, 3), order="F")
+
+    x = pts[:, 0, 0]
+    y = pts[0, :, 1]
+    z = pts[:, :, 2]  # topo
+
+    return x, y, z
+
+def build_topography_interpolator(grid):
+
+    x, y, z = extract_topo_from_2d_grid(grid)
+
+    interp = RegularGridInterpolator(
+        (x, y),
+        z,
+        bounds_error=False,
+        fill_value=-np.inf
+    )
+
+    return interp
+
+def inside_topography(p, topo_interp):
+
+    x, y, z = p
+    z_topo = topo_interp((x, y))
+
+    return z <= z_topo
+
+def compute_ray_length_surface(origin, direction, topo_interp, max_dist, ds=2.0):
+
     t = 0.0
-    inside_prev = inside_fn(*origin)
+    inside_prev = inside_topography(origin, topo_interp)
+
     length = 0.0
+
     while t < max_dist:
+
         t_next = t + ds
-        p = origin + t_next * direction
-        inside_now = inside_fn(*p)
+        p_next = origin + t_next * direction
+
+        inside_now = inside_topography(p_next, topo_interp)
+
         if inside_prev and inside_now:
             length += ds
+
         elif inside_prev != inside_now:
-            # raffinement binaire pour trouver l’interface
+            # raffinement interface
             t0, t1 = t, t_next
-            for _ in range(5):
+
+            for _ in range(6):
                 tm = 0.5 * (t0 + t1)
                 pm = origin + tm * direction
-                if inside_fn(*pm) == inside_prev:
+
+                if inside_topography(pm, topo_interp) == inside_prev:
                     t0 = tm
                 else:
                     t1 = tm
+
             if inside_prev:
                 length += (t1 - t)
+
         inside_prev = inside_now
         t = t_next
+
     return length
 
-def compute_all_rays_length(rays_dirs, origin, inside_fn, max_dist):
+
+def compute_all_rays_length(rays_dirs, origin, topo_interp, max_dist):
 
     nrays = rays_dirs.shape[0]
     rays_length = np.zeros(nrays)
 
     for i in tqdm(range(nrays), desc="Rays"):
         d = rays_dirs[i] / np.linalg.norm(rays_dirs[i])
-        rays_length[i] = compute_ray_length(
+        rays_length[i] = compute_ray_length_surface(
             origin=np.array(origin),
             direction=d,
-            inside_fn=inside_fn,
+            topo_interp=topo_interp,
             max_dist=max_dist
         )
 
@@ -77,10 +127,8 @@ def compute_all_rays_length(rays_dirs, origin, inside_fn, max_dist):
 
 def process_configuration(
     tel,
-    conf_name,
     conf,
-    geom,
-    inside_fn,
+    topo_interp,
     max_dist
 ):
 
@@ -98,28 +146,15 @@ def process_configuration(
     rays_length = compute_all_rays_length(
         subrays_dirs,
         origin=np.array(tel.coordinates),
-        inside_fn=inside_fn,
+        topo_interp=topo_interp,
         max_dist=max_dist
     )
-
     return rays_length, subrays_is_main
 
-def save_rays_length_hdf5(h5file, tel_name, conf_name, rays_length):
-
-    grp_tel = h5file.require_group(tel_name)
-    grp = grp_tel.require_group(conf_name)
-
-    if "rays_length" in grp:
-        del grp["rays_length"]
-
-    grp.create_dataset(
-        "rays_length",
-        data=rays_length,
-        compression="gzip"
-    )
 
 
-def process_telescope(h5file, tel, geom, dirs, vtkfile):
+
+def process_telescope(h5file, tel, grid, max_dist):
     tel.compute_angular_coordinates()
 
     # tel.adjust_height(
@@ -129,19 +164,17 @@ def process_telescope(h5file, tel, geom, dirs, vtkfile):
     #     geom.mask_voxel
     # )
 
-    inside_fn = make_inside_function_voi(geom)
+    topo_interp = build_topography_interpolator(grid)
 
     for conf_name, conf in tel.configurations.items():
     
-        rays_length, mask_main = process_configuration(
+        rays_length, _ = process_configuration(
                     tel,
-                    conf_name,
                     conf,
-                    geom,
-                    inside_fn,
-                    max_dist=1000.0
+                    topo_interp,
+                    max_dist=max_dist
                 )
-        print(check_array_order(rays_length))
+
         save_rays_length_hdf5(
             h5file,
             tel.name,
@@ -149,39 +182,15 @@ def process_telescope(h5file, tel, geom, dirs, vtkfile):
             rays_length
         )
 
-def load_from_hdf5(h5file, tel_name, conf_name, key="rays_length"):
-    grp = h5file[tel_name][conf_name]
-    return np.array(grp[key])
-
-def set_norm(arr):
-    vmin, vmax = np.nanmin(arr[arr!=0]), np.nanmax(arr)
-    norm = LogNorm(vmin, vmax) if vmax/vmin > 2e1 else Normalize(vmin, vmax)
-    return norm
-
-def plot_configuration(axs, h5file, tel, mask=None):
-    configurations=tel.configurations.items()
-    if not isinstance(axs, np.ndarray): axs = np.array([axs])
-    assert len(axs) == len(configurations), "Axes shape does not match number of configurations"
-    for j,(_, conf) in enumerate(configurations):
-        ax = axs[j]
-        array = load_from_hdf5(h5file, tel.name, conf.name)
-        array = np.flipud(array) if (tel.name == "SXF") or (tel.name == "OM") else array.reshape(-1, order="C")
-        u_edges, v_edges = conf.u_edges, conf.v_edges
-        u,v = (u_edges[:-1] + u_edges[1:]) / 2, (v_edges[:-1] + v_edges[1:]) / 2
-        # m = mask[conf.name].reshape(conf.shape_uv) if mask is not None else np.ones(conf.shape_uv, dtype=bool)
-        array = array.reshape(conf.shape_uv)
-        # array[~m] = np.nan
-        im = ax.pcolormesh(u,v, array)#norm=set_norm(array))
-        cax = inset_locator.inset_axes(ax, width="4%",  height="100%", borderpad=-2,loc = 'right')
-        cb = plt.colorbar(im, cax=cax, extend='max')
-        ax.label_outer()
-        ax.set_aspect('equal')
 
 if __name__ == "__main__":
 
-    dir_dem = Path("/Users/raphael/pymusouf/struct_link/soufriere/dem")
-    input_vts = dir_dem / "topo_voi.vts"
-    
+    survey_name = CURRENT_SURVEY.name   
+    dir_survey = STRUCT_DIR / survey_name
+    dir_dem = dir_survey / "dem"
+    dir_voxel = dir_survey / "voxel"
+    dir_model = dir_survey / "model"
+
     survey = CURRENT_SURVEY
     struct_dir = STRUCT_DIR / survey.name
     dirs = {
@@ -192,7 +201,16 @@ if __name__ == "__main__":
     }
     basename_tel = "real_telescopes"
     dtel = survey.telescope 
-    grid, geom = load_dem_grid(input_vts)
+    input_vts = dir_dem / "topo_roi.vts"
+    reader = vtk.vtkXMLStructuredGridReader()
+    reader.SetFileName(str(input_vts))
+    reader.Update()
+
+    grid = reader.GetOutput()
+    # input_vts = dir_voxel / "topo_voi_vox32m.vts"
+    # grid, geom = load_voxel_grid(input_vts)
+    # print(np.count_nonzero(geom.mask_voxel), len(geom.mask_voxel))
+    # exit()
     # tel  = {"SNJ":survey.telescope ["SNJ"]}
     tel_name ="SB"
     tel = survey.telescope [tel_name]
@@ -202,12 +220,10 @@ if __name__ == "__main__":
             process_telescope(
                 fh5,
                 tel,
-                geom,
-                dirs, 
-                None,
+                grid,
+                max_dist=1200
             )
     print(f"Saved {h5_path}")
-
 
     ###Test read h5file
     tel = dtel[tel_name]

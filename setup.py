@@ -23,7 +23,7 @@ REQUIREMENTS = [
     'tqdm', #process monitoring 
     'seaborn',#nice plot templates
     'uproot', #to read, update, and write root file
-    'vtk', #3d modelling
+    'vtk', #3d model rendering
 ]
 
 setup(
@@ -45,7 +45,7 @@ setup(
           'survey': ["*.yaml"],
      },
     install_requires=REQUIREMENTS,
-    keywords=['Muography', 'Volcano', 'Scintillator'],
+    keywords=['Muons', 'Tomography', 'Volcano', 'Scintillator'],
     classifiers=[
         'Programming Language :: Python :: 3.11',
     ],
