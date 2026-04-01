@@ -22,13 +22,13 @@ DICT_SURVEY = {}
     
 class Survey: 
    
-    def __init__(self, name:str=None, path:Union[str, Path]=None):
+    def __init__(self, name:str):
         self.name = name
         self.dem = Union[Path, str] #path to dem file
         self.telescope = {} #tel: Telescope object
         self.runs = {} #tel: path to data runsfiles
-        self.surface_grid = np.ndarray #shape : (3, m, n)
-        self.surface_center = None
+        # self.surface_grid = np.ndarray #shape : (3, m, n)
+        # self.surface_center = None
         # self.flux = {}
         # self.raypath = {}
 
@@ -43,7 +43,7 @@ class Survey:
         if isinstance(s,str): s=Path(s) 
         if s.suffix == ".npy": grid = np.load(s)  #grid (np.ndarray): surface grid shape (3, m, n)
         elif s.suffix ==".txt": grid = np.loadtxt(s)
-        else: raise ValueError("Surface grid failed")
+        else: raise ValueError("Wrong DEM file format")
         shp = grid.shape
         if shp[0]==3: grid=grid.T
         mx, my = shp[0]//2, shp[1]//2
@@ -65,18 +65,20 @@ def get_runs(content:dict):
     return runs
 
 def set_survey(name:str):
-    survey = Survey()
-    survey.name = name
+    survey = Survey(name)
     if not name in LIST_AVAIL_SURVEY: 
         print(f"{name} survey not in 'survey.yaml'")
         return None
     f = Path(survey_yaml[name]["dem"])
-    if f.exists():
-        survey.dem = f 
-        survey.set_surface_grid()
-        DICT_SURVEY[name] = survey
-    else: 
-        print(f"DEM file not available for {name} survey.")
+    # if f.exists():
+    #     try : 
+    #         survey.dem = f 
+    #         survey.set_surface_grid()
+    #     except : 
+    #         print(f"Failed to set surface grid for {name} survey.")
+    # else: 
+    #     print(f"DEM file not available for {name} survey.")
+    DICT_SURVEY[name] = survey
     ltel = survey_yaml[name]["telescope"]
     for k,v in ltel.items(): 
         if k in DICT_TEL: survey.telescope[k] = DICT_TEL[k] 
