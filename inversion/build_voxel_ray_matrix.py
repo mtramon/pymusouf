@@ -785,15 +785,31 @@ def process_telescope(h5file, tel, geom, dirs, vtkfile):
             vtkfile
         )
 
+# def save_sparse_matrix_hdf5(h5file, tel_name, conf_name, M, acceptance, rays_length):
+#     grp_tel = h5file.require_group(tel_name)
+#     grp = grp_tel.require_group(conf_name)
+#     grp.create_dataset("data", data=M.data, compression="gzip")
+#     grp.create_dataset("indices", data=M.indices, compression="gzip")
+#     grp.create_dataset("indptr", data=M.indptr, compression="gzip")
+#     grp.create_dataset("shape", data=M.shape)
+#     grp.create_dataset("acceptance", data=acceptance)
+#     grp.create_dataset("rays_length", data=rays_length)
+
 def save_sparse_matrix_hdf5(h5file, tel_name, conf_name, M, acceptance, rays_length):
     grp_tel = h5file.require_group(tel_name)
     grp = grp_tel.require_group(conf_name)
-    grp.create_dataset("data", data=M.data, compression="gzip")
-    grp.create_dataset("indices", data=M.indices, compression="gzip")
-    grp.create_dataset("indptr", data=M.indptr, compression="gzip")
+    def overwrite_dataset(group, name, data, **kwargs):
+        if name in group:
+            del group[name]  # supprime l'ancien dataset
+        group.create_dataset(name, data=data, compression="gzip", **kwargs)
+    overwrite_dataset(grp, "data", M.data)
+    overwrite_dataset(grp, "indices", M.indices)
+    overwrite_dataset(grp, "indptr", M.indptr)
+    if "shape" in grp:
+        del grp["shape"]
     grp.create_dataset("shape", data=M.shape)
-    grp.create_dataset("acceptance", data=acceptance)
-    grp.create_dataset("rays_length", data=rays_length)
+    overwrite_dataset(grp, "acceptance", acceptance)
+    overwrite_dataset(grp, "rays_length", rays_length)
 
 
 def load_sparse_matrix_hdf5(file, tel_name, conf_name):
@@ -908,15 +924,15 @@ if __name__ == "__main__":
     grid, geom = load_voxel_grid(vtkfile)
     matrices= {}
     basename = "real_telescopes"
-    dtel = survey.telescope 
-
+    dtel = survey.telescopes 
+    dtel = {"SBR": dtel["SBR"], "SXF": dtel["SXF"]} # pour test rapide
     # basename = f"toy_telescopes_s9506"   
     # fin_toytel = dirs["tel"] / f"{basename}_vox{vs}m.pkl"
     # with open(fin_toytel, 'rb') as f:
     #     dtel = pickle.load(f) 
 
     h5_path = dirs["voxel"] / f"{basename}_voxel_ray_matrices_vox{vs}m.h5"
-    with h5py.File(h5_path, "w") as file:
+    with h5py.File(h5_path, "r+") as file:
         for i, tel in tqdm(enumerate(dtel.values()), total=len(dtel), desc="Progress"):
                 process_telescope(
                     file,

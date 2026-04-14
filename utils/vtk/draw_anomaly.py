@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 from datetime import datetime
-import pyvista as pv
 import numpy as np 
 from pathlib import Path
 from tqdm import tqdm

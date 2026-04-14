@@ -147,15 +147,15 @@ if __name__ =="__main__":
         "model": dir_survey / "model",
         "tel": dir_survey / "telescope",
     }
-    dirs["synth"] = dirs["model"] / "synthetic"
-    input_data = dirs["synth"] / "training_data.npz"
-    dirs["train"] = dirs["synth"] / "training"
+    dirs["post"] = dirs["model"] / "postreg"
+    input_data = dirs["post"] / "training_data.npz"
+    dirs["train"] = dirs["post"] / "training"
     dirs["train"].mkdir(parents=True, exist_ok=True)
 
-    input_file = dirs["synth"] / "ElecCond_topo_voi_vox32m_reg.npz"
+    input_file = dirs["post"] / "ElecCond_topo_voi_vox32m_reg.npz"
     print_file_datetime(input_file)
 
-    output_file = dirs["synth"] / "ElecCond_topo_voi_vox32m_post.vts"
+    output_file = dirs["post"] / "ElecCond_topo_voi_vox32m_post.vts"
     parser = argparse.ArgumentParser(description="Application post‑régularisation par U‑Net")
     parser.add_argument('--checkpoint', type=str, default=str(dirs["train"] / "best_model.pth"),
                         help="Fichier .pth contenant les poids du modèle entraîné")

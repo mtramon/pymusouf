@@ -18,7 +18,7 @@ def save_rays_length_hdf5(h5file, tel_name, conf_name, rays_length):
         compression="gzip"
     )
 
-def load_from_hdf5(h5file, tel_name, conf_name, key="rays_length"):
+def load_raylength_from_hdf5(h5file, tel_name, conf_name, key="rays_length"):
     grp = h5file[tel_name][conf_name]
     return np.array(grp[key])
 
@@ -33,7 +33,7 @@ def plot_configuration(axs, h5file, tel, mask=None):
     assert len(axs) == len(configurations), "Axes shape does not match number of configurations"
     for j,(_, conf) in enumerate(configurations):
         ax = axs[j]
-        array = load_from_hdf5(h5file, tel.name, conf.name)
+        array = load_raylength_from_hdf5(h5file, tel.name, conf.name)
         array = np.flipud(array) if (tel.name == "SXF") or (tel.name == "OM") else array.reshape(-1, order="C")
         u_edges, v_edges = conf.u_edges, conf.v_edges
         u,v = (u_edges[:-1] + u_edges[1:]) / 2, (v_edges[:-1] + v_edges[1:]) / 2

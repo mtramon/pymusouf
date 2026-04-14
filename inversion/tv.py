@@ -52,7 +52,8 @@ class InversionTV:
                  rho0=None, 
                  sensitivity=None, 
                  weights=None, 
-                 weights_z=None):
+                 weights_z=None,
+                 density_range=[1e3, 4e3]):
         """
         M : matrice d'observation (creuse CSR), shape (ndata, nvox)
         data : vecteur des données (ndata,)
@@ -61,6 +62,7 @@ class InversionTV:
         lambda_reg : poids de la régularisation TV
         mu : poids du damping (0 par défaut)
         rho0 : modèle a priori pour le damping (si mu>0)
+        density_range : [rho_min, rho_max] pour le clipping du modèle
         """
         self.M = M
         self.data = data
@@ -76,7 +78,7 @@ class InversionTV:
         self.sensitivity = sensitivity
         # Construction des opérateurs de gradient (différences avant) pour la TV
         self.Dx, self.Dy, self.Dz = self._build_gradient_ops(mask)
-
+        self.rho_range = density_range
 
     def _build_gradient_ops(self, mask):
         nx, ny, nz = self.nx, self.ny, self.nz
@@ -213,7 +215,7 @@ class InversionTV:
             p[:,2] = (p[:,2] + tau * Gz) / (1 + tau * nrm)
         return u
 
-    def solve(self, rho_init=None, rho_range=[1e3, 4e3], lambda_reg=None, mu=0, mu_z=0, max_iter=500, tol=1e-5,  verbose=False):
+    def solve(self, rho_init=None, lambda_reg=None, mu=0, mu_z=0, max_iter=500, tol=1e-5,  verbose=False):
         """
         Résout le problème par FISTA.
         """
@@ -227,7 +229,7 @@ class InversionTV:
         # Constante de Lipschitz de la partie lisse
         self.Lf = self._estimate_lipschitz(mu=mu, mu_z=mu_z)
         gamma = 1.0 / self.Lf  # pas
-        rho_min, rho_max = rho_range
+        rho_min, rho_max = self.rho_range
         obj_prev = np.inf
         for i in range(max_iter):
             # Gradient de la partie lisse en y
@@ -334,15 +336,14 @@ if __name__ == "__main__":
     # print(check_array_order(rho_true_voi) )
     if rho_true_voi.max() < 1e3: 
         rho_true_voi *= 1e3 # if density is in g/cm^3, convert to kg/m^3
-    dtel = CURRENT_SURVEY.telescope
-    r, c = 0, 0
+
     data_concat = None
     M_concat = None
     detectors_intercept = np.zeros_like(mask_voi) 
     det_coords = [] 
 
     basename = f"real_telescopes"   
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
 
     basename = f"toy_telescopes_s9506"   
     fin_toytel = dir_tel / f"toy_telescopes_s9506_vox{vs}m.pkl"
@@ -361,7 +362,7 @@ if __name__ == "__main__":
             tel.compute_angular_coordinates()
             det_coords.append(tel.coordinates)
             x0, y0, z0 = tel.coordinates
-            for conf_name, conf in tel.configurations.items():
+            for i, (conf_name, conf) in enumerate(tel.configurations.items()):
                 ze_matrix = tel.zenith_matrix[conf_name]
                 mask_rays = (ze_matrix <= 90 * np.pi/180).ravel()
                 nu, nv = conf.shape_uv
@@ -393,7 +394,7 @@ if __name__ == "__main__":
                 unc[mask_rays] = np.clip(0.02*opacity[mask_rays], 1e-4*mean_opacity, 0.2*mean_opacity)
                 opacity += unc
                 opacity[~mask_rays] = 0 
-                if r==0 : 
+                if i==0 : 
                     data_concat = opacity
                     unc_concat = unc
                     M_concat = M_norm   
@@ -401,7 +402,6 @@ if __name__ == "__main__":
                     data_concat = np.hstack((data_concat, opacity ))
                     unc_concat = np.hstack((unc_concat, unc))
                     M_concat = sp.vstack((M_concat, M_norm), format='csr')
-                r+=1 
 
     print("All : nrays, nvoxels = ", M_concat.shape)
     x_edges, y_edges, z_edges = geom.x_edges, geom.y_edges, geom.z_edges
@@ -431,11 +431,8 @@ if __name__ == "__main__":
     print("unc: min, max: ",np.min(unc_concat), np.max(unc_concat))
     
     mask_voxel = mask_voi & mask_center & mask_z & mask_det_intercept & mask_weight #& mask_rays_intercept
-    # print(check_array_order(mask_voxel))
     
-    # print(np.count_nonzero(mask_voxel))
     coords = np.vstack((X.ravel(order=ORDER), Y.ravel(order=ORDER), Z.ravel(order=ORDER))).T
-    # print(check_array_order(coords))
 
     sensitivity = np.zeros(nvox)
     diag_data = np.zeros(nvox)

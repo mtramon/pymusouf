@@ -63,7 +63,7 @@ if __name__ == "__main__":
     dir_model = dir_survey / "model"
     vs = int(sys.argv[1]) if len(sys.argv) > 1 else 32  # voxel size in m (edge length)
 
-    dir_out = dir_model / "inversion"
+    dir_out = dir_model / "inversion" / "real"
     dir_out.mkdir(parents=True, exist_ok=True)
     # fin = dir_out / f"density_models_vox{vs}m.npz"
     fin = Path(__file__).parent / f"results.npz"
@@ -71,7 +71,6 @@ if __name__ == "__main__":
 
     arrays = np.load(fin, allow_pickle=True)
     density_post = arrays["density_post"]
-    density_true = arrays["density_true"] 
     mask_voxel = arrays["mask_voxel"].astype(bool)
     lambda_reg= arrays["lambda_reg"]
     mu_damp = arrays["mu_damp"] 
@@ -116,8 +115,6 @@ if __name__ == "__main__":
         fig.savefig(fout_png)
         print(f"Saved {fout_png}")
 
-    mean_true = np.mean(density_true[mask_voxel])
-    min_post, max_post = np.min(density_true[mask_voxel]), np.max(density_true[mask_voxel])
     mean_post = np.mean(density_post[:,mask_voxel], axis=1)
     min_post, max_post = np.min(density_post[:,mask_voxel], axis=1), np.max(density_post[:,mask_voxel], axis=1)
 
@@ -128,15 +125,18 @@ if __name__ == "__main__":
     # ax.fill_between(lambda_reg, ymin, ymax, alpha=0.5)
     # ax.plot(lambda_reg, mean_post)
     bins=100
-    xtrue = density_true[mask_voxel]
     min0, max0 = 0.9e3, 4.1e3#min(xtrue)-500, max(xtrue)+500
-    h, e = np.histogram(xtrue, bins=bins, range=[min0, max0],  density=True)
-    ymax = np.max(h)
-    bc, w = (e[:-1]+e[1:])/2, abs(e[:-1]-e[1:])
-    ax0 = axs.ravel()[0]
-    ax0.bar(bc,  h, w, color="orange", label = f"True\nmean={mean_true:.3e}")
-    ax0.legend(loc="best", fontsize=24)
-    ax0.set_xlim(min0, max0)
+    if "density_true"  in arrays.keys() :
+        density_true = arrays["density_true"] 
+        xtrue = density_true[mask_voxel]
+        h, e = np.histogram(xtrue, bins=bins, range=[min0, max0],  density=True)
+        ymax = np.max(h)
+        bc, w = (e[:-1]+e[1:])/2, abs(e[:-1]-e[1:])
+        ax0 = axs.ravel()[0]
+        mean_true = np.mean(density_true[mask_voxel])
+        ax0.bar(bc,  h, w, color="orange", label = f"True\nmean={mean_true:.3e}")
+        ax0.legend(loc="best", fontsize=24)
+        ax0.set_xlim(min0, max0)
     # ax0.set_yscale("log")
     ix_opt = np.argmin(abs(misfits_data / ndata - 1))
     for j in range(nmu):
@@ -155,6 +155,7 @@ if __name__ == "__main__":
             
             ax.set_xlim(min0, max0)
             # ax.set_yscale("log")
+            ymax = np.max(h)
             ax.set_ylim(0, ymax)
             # ax.label_outer()
             # ax.set_xscale("log")

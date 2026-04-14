@@ -27,17 +27,8 @@ params = {'legend.fontsize': 'medium',
          'figure.figsize': (8,8),
           'savefig.bbox': "tight",   
         'savefig.dpi':200    }
+props = dict(boxstyle='round', facecolor='white', alpha=0.5)
 plt.rcParams.update(params)
-
-def compute_experimental_acceptance(counts, flux, time):
-    return counts/(flux*time)
-
-def correct_tomo_images(htomo, hcalib, binx=None, biny=None, eps=1e-12):
-    m = hcalib != 0 
-    htomo[~m] = np.nan
-    # htomo[m] /= hcalib[m]
-    htomo[m] /= (hcalib[m]+eps)
-    return htomo
 
 if __name__ == "__main__":
 
@@ -59,6 +50,7 @@ if __name__ == "__main__":
     df = pd.read_csv(file_track)
     df.set_index("event_id", inplace=True)
     
+    # '''
     grp_evt_id = df.groupby('event_id')
     t = grp_evt_id['timestamp'].first().to_numpy()
     er = EventRate(time=t, t0=0)
@@ -77,7 +69,7 @@ if __name__ == "__main__":
     ax.grid(alpha=0.2)
     fig.savefig(fout)
     print(f"Save {fout}")
-    # exit()
+
     ncols,nrows = len(dict_conf),2
     fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), constrained_layout=True,  sharex=True, sharey=True) #gridspec_kw=kwargs_size)
     if not isinstance(axs, np.ndarray): axs = np.array([axs])
@@ -85,36 +77,38 @@ if __name__ == "__main__":
     vmax = 0
     dict_out = {}
     l_h2d = []
+    gold = (df['nhits_0']==1) & (df['nhits_1']==1) & (df['nhits_2']==1) 
+    mip_like = (df['nhits_0']<=10) & (df['nhits_2']<=10) 
+    gold = gold & (df['nhits_3']==1) if len(tel.panels) > 3 else gold
+    rms =  df["rms"]
     for i in range(2):
         fin = i 
         for j,(c, conf) in enumerate(dict_conf.items()):
-            mask = (df['config'] == c) 
-            if fin == 1 : mask = mask & (df['inside'] == fin)
+            mask_conf = (df['config'] == c) 
+            mask = mask_conf
+            if fin == 1 : 
+                p90 = np.percentile(rms, 90)
+                mask_rms = (rms < p90).astype(bool)
+                mask = mask_conf & mip_like & mask_rms
             x, y = df["dx_dz"][mask], df["dy_dz"][mask]
-            # range_xy = np.array([[min(x), max(x)], [min(y), max(y)]])
-            # if fin == 1: print(range_xy, conf.range_uv)
             range_xy = conf.range_uv
-            # print(range_xy)
             shp = tel.azimuth_matrix[c].shape
             bins = shp #
-            # if i==1 and c.startswith("3p"): bins = (shp[0]-10, shp[1]-10)
-            # dz = conf.length_z 
-            # range_xy = np.arange(-15.5, 16.5)
-            # bins = (range_xy * 50) / dz
-            # if c == "4p": 
-            #     x = x + np.random.uniform(-1e-2, 1e-2, size=len(x))
-            #     y = y + np.random.uniform(-1e-2, 1e-2, size=len(y))
             h, binx, biny = np.histogram2d(x, y, bins=bins, range=range_xy)
             if i == 0 : dict_out[c] = {"h":h,"binx":binx,"biny":biny}
             _max = np.max(h) 
             vmax= _max if vmax < _max else vmax
             if i == 0 :axs[i,j].set_title(c + " config")
+            axs[i,j].text(0.05, 0.92, f"total: {np.sum(h):.2e}", fontsize="x-large", color="black", 
+                    transform=axs[i,j].transAxes, 
+                    bbox= props,
+                    ha="left",va="bottom",**{"fontweight":"bold"})  
             l_h2d.append((h, binx, biny))
-    fout = cmn.run.dirs["pkl"] / "images_brut.pkl"
-    with open(fout, 'wb') as f:
-        pickle.dump(dict_out, f)
-    print(f"Save {fout}")
-    
+
+    # fout = cmn.run.dirs["pkl"] / "images_brut.pkl"
+    # with open(fout, 'wb') as f:
+    #     pickle.dump(dict_out, f)
+    # print(f"Save {fout}")
 
     for i, ax in enumerate(axs.ravel()):
         h, bx, by = l_h2d[i]
@@ -136,99 +130,98 @@ if __name__ == "__main__":
     file_out = dir_out / "images_brut.png"
     fig.savefig(file_out, bbox_inches="tight", dpi=200)
     print(f"Save {file_out}")
+    # '''
 
-    if not "calib" in runs.keys(): exit()
-    run_calib = runs.get("calib")
-    pkl_calib = run_calib.path / "pkl" / "images_brut.pkl"
-    
-    if pkl_calib.exists() and "tomo" in args.run: 
-        with open(pkl_calib, 'rb') as f:
-            dict_calib = pickle.load(f) 
-        print_file_datetime(pkl_calib)
-        fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), sharex=True, sharey=True, constrained_layout=True)
-        if axs.ndim ==1 : axs=axs[:,np.newaxis]
-        dict_corr={}
-        vmax_corr = 0
-        for i in range(2):
-            for j,(c, conf) in enumerate(dict_conf.items()):
-                hcalib = dict_calib[c]["h"]
-                d_tomo = dict_out[c]
-                htomo = d_tomo["h"]
-                bx, by = d_tomo["binx"], d_tomo["biny"]
-                ax = axs[i, j]
-                if i == 0 : 
-                    im = ax.pcolormesh(bx, by, htomo, norm=LogNorm(1, vmax))#, norm=LogNorm(1, vmax))
-                else: 
-                    htomo_corr = correct_tomo_images(htomo, hcalib)
-                    vmax= np.nanmax(htomo_corr)
-                    vmax_corr = vmax if vmax > vmax_corr  else vmax_corr
-                    dict_corr[c] = {"h":htomo_corr,"binx":bx,"biny":by}
-        norm_corr = LogNorm(vmin=1e-3, vmax=vmax_corr)
-        for j, (c, corr) in enumerate(dict_corr.items()):
-            h, bx, by = corr["h"], corr["binx"], corr["biny"]
-            h = np.flipud(h) if (tel.name == "SXF") or (tel.name == "OM") else h
-            ax = axs[1, j]
-            im = ax.pcolormesh(bx, by, h, norm=norm_corr)#, norm=LogNorm(1, vmax))
-            if j == len(dict_conf) - 1 : 
-                cax = inset_locator.inset_axes(ax, width="4%",  height="100%", borderpad=-3,loc = 'right')
-                cb= fig.colorbar(im, cax=cax, extend='max')
-                cb.set_label(f'Entries Norm OS', labelpad=1)
-                cb.ax.tick_params(which="both", labelsize="x-large",pad=1)    
-        fout_png = dir_out / "images_corr.png"
-        fig.savefig(fout_png)
-        print(f"Save {fout_png}")
-        fout_pkl = cmn.run.dirs["pkl"] / "images_corr.pkl"
-        with open(fout_pkl, 'wb') as f:
-            pickle.dump(dict_corr, f)
-        print(f"Save {fout_pkl}")
-    
-    exit()
-    fluxos_file = dir_flux / "openSkyFluxStructure.mat"
-    fluxos_struct = loadmat(str(fluxos_file))["openSkyFluxStructure"][0][0]
-    theta_os_grid = fluxos_struct[0].ravel() * np.pi/180
-    flux_os_grid = fluxos_struct[1].ravel() #
-    theta_os_tel = tel.zenith_os_matrix[conf.name]
-    flux_os_tel = np.interp(theta_os_tel, theta_os_grid, flux_os_grid)
-    print("openSkyFluxStructure:", np.nanmin(flux_os_tel), np.nanmax(flux_os_tel))
+    ncols,nrows=len(tel.configurations),1
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), constrained_layout=True,  sharex=True, sharey=True) #gridspec_kw=kwargs_size
+    if not isinstance(axs, np.ndarray): axs = np.array([axs])
+    for j,(c, conf) in enumerate(dict_conf.items()):
+        ax = axs[j]
+        ax.set_title( tel.name + "-" + c)
+        mask_conf = (df['config'] == c) 
+        rms =  df["rms"][mask_conf]
+        vmin, vmax = np.min(rms), np.max(rms)
+        h, edges = np.histogram(rms, bins=50, range=(vmin, vmax))
+        ax.bar(edges[:-1], h, width=np.diff(edges), edgecolor='darkgrey', align="edge", alpha=1, label="All") 
+        # mask_det = mask_conf & (df['ransac'] == 0)
+        # rms_det =  df["rms"][mask_det]
+        # h, edges = np.histogram(rms_det, bins=50, range=(vmin, vmax))
+        # ax.bar(edges[:-1], h, width=np.diff(edges), edgecolor='darkgrey', align="edge", alpha=.7, label="Deterministic")   
+        # mask_ransac = mask_conf & (df['ransac'] == 1)
+        # rms_ransac =  df["rms"][mask_ransac]
+        # h, edges = np.histogram(rms_ransac, bins=50, range=(vmin, vmax))
+        # ax.bar(edges[:-1], h, width=np.diff(edges), edgecolor='darkgrey', align="edge", alpha=.5, label="RANSAC")   
+        # ax.set_title(c + " config")
+        ax.set_xlabel("RMS [mm]")
+        ax.set_ylabel("Entries")
+        p90 = np.percentile(rms, 90)
+        ax.axvline(p90, color='orange', linestyle='--', label=f'90th perc: {p90:.2f} mm')
+        p95 = np.percentile(rms, 95)
+        ax.axvline(p95, color='red', linestyle='--', label=f'95th perc: {p95:.2f} mm')
+        # ax.set_yscale("log")
+        ax.legend() 
+    file_out = dir_out / "rms.png"
+    fig.savefig(file_out, bbox_inches="tight", dpi=200)
+    print(f"Save {file_out}")
 
-    compute_experimental_acceptance(hcalib, flux_os_tel, )
 
-    fluxop_file = dir_flux / 'IntegralFluxVsOpAndZaStructure_Corsika.mat'
-    print_file_datetime(fluxop_file)
-    fluxop_grid = loadmat(str(fluxop_file))['IntegralFluxVsOpAndZaStructure_rock_MuonsEKin_onlyModel'] 
-    opacity_log10 = fluxop_grid[0][0][1] #opacity shape: (bins_ene, bins_op) = (100, 600)
-    opacity_grid = np.exp( np.log(10) * opacity_log10 )
-    theta_grid = fluxop_grid[0][0][0] #zenith angle
-    flux_grid = fluxop_grid[0][0][2] #Corsika flux
-    flux_grid_low = fluxop_grid[0][0][3]
-    flux_grid_up = fluxop_grid[0][0][4]
-    dir_voxel = dir_survey / "voxel" 
-    # file_voxelray = dir_voxel / f"voxel_ray_matrix_{tel.name}_{conf.name}_vox8m.npz"
-    file_ray_length =  dir_voxel / f"ray_length_{tel.name}_{conf.name}_vox4m.npy"
-    raylength = np.load(file_ray_length).reshape(conf.shape_uv)
-    
-    u_edges, v_edges = conf.u_edges, conf.v_edges
-    u,v = (u_edges[:-1] + u_edges[1:]) / 2, (v_edges[:-1] + v_edges[1:]) / 2
-    delta_z = conf.length_z*1e-1 #mm > cm
-    tel.compute_angular_coordinates()
-    theta_tel = tel.zenith_matrix[conf.name]
+    ncols,nrows=len(tel.configurations),2
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), constrained_layout=True,  sharex=True, sharey=True) #gridspec_kw=kwargs_size
+    if not isinstance(axs, np.ndarray): axs = np.array([axs])
+    if axs.ndim ==1 : axs=axs[:,np.newaxis]    
+    for j,(c, conf) in enumerate(dict_conf.items()):
+        mask_conf = (df['config'] == c) 
+        for i, coord in enumerate(["x","y"]):
+            ax = axs[i,j]
+            if i==0:
+                ax.set_title( tel.name + "-" + c)
+            k = f"mip_score_{coord}"
+            score_x =  df[k][mask_conf]
+            vmin, vmax = np.min(score_x), np.max(score_x)
+            h, edges = np.histogram(score_x, bins=50, range=(vmin, vmax))
+            ax.bar(edges[:-1], h, width=np.diff(edges), align="edge", alpha=1, label="All")     
+            # ax.set_title(c + " config")
+            ax.set_xlabel(k)
+            ax.set_ylabel("Entries")
+            # ax.set_yscale("log")
+            ax.legend() 
+    file_out = dir_out / "mip_scores.png"
+    fig.savefig(file_out, bbox_inches="tight", dpi=200)
+    print(f"Save {file_out}")
 
-    mask = (raylength > 1) & (theta_tel <= np.pi/2)
-    opacity_tel = np.zeros_like(raylength) 
-    opacity_tel[mask] = 2.65 * (raylength[mask])
 
-    X,Y, values = theta_grid.ravel(), opacity_grid.ravel(), flux_grid.ravel()
-    points = np.vstack((X.ravel(), Y.ravel())).T
+    ncols,nrows=len(tel.configurations),2
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), constrained_layout=True,  sharex=True, sharey=True) #gridspec_kw=kwargs_size
+    if not isinstance(axs, np.ndarray): axs = np.array([axs])
+    if axs.ndim ==1 : axs=axs[:,np.newaxis]    
+    for j,(c, conf) in enumerate(dict_conf.items()):
+        mask_conf = (df['config'] == c) 
+        for i, coord in enumerate(["x","y"]):
+            if i==0: ax.set_title( tel.name + "-" + c)
+            ax = axs[i,j]
+            h2d, ex, ey = np.histogram2d(df[f"mip_score_{coord}"][mask_conf], df["rms"][mask_conf], bins=50)
+            bx, by = (ex[:-1] + ex[1:]) / 2, (ey[:-1] + ey[1:]) / 2
+            ax.pcolormesh(bx, by, h2d.T, norm=LogNorm(1, np.max(h2d)))
+            ax.set_xlabel("mip_score_" + coord)
+            ax.set_ylabel("RMS [mm]") 
+    file_out = dir_out / "rms_vs_mip_scores.png"
+    fig.savefig(file_out, bbox_inches="tight", dpi=200)
+    print(f"Save {file_out}")
 
-    xi = np.vstack((theta_tel.ravel(), opacity_tel.ravel())).T
-    nu, nv = len(u_edges)-1, len(v_edges)-1
-    flux_tel = griddata(points, values, xi=xi, method='linear').reshape(nu, nv) # 1 / [cm^2.sr.s]
-    flux_tel[~mask] = np.nan
-    fig, ax = plt.subplots()
-    im = ax.pcolormesh(u, v, flux_tel, norm=LogNorm(np.nanmin(flux_tel),np.nanmax(flux_tel)))
-    cb = fig.colorbar(im)
-    cb.set_label("Integral Flux (cm$^2$ sr s)$^{-1}$")
-    fout_png= f"{fluxop_file.stem}_{tel.name}_{conf.name}.png"
-    fig.savefig(fout_png)
-    print(f"Saved {fout_png}")
-    
+    ncols,nrows=len(tel.panels),1
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize = (6*ncols, 6*nrows), constrained_layout=True,  sharex=True, sharey=True) #gridspec_kw=kwargs_size
+    if not isinstance(axs, np.ndarray): axs = np.array([axs])
+    # if axs.ndim ==1 : axs=axs[:,np.newaxis]    
+    for j, panel in enumerate(tel.panels):
+        ax = axs[j]
+        v = df[f"nhits_{j}"]
+        v = v[v>0]
+        vmin, vmax = np.min(v), np.max(v)
+        h, edges = np.histogram(v, bins=range(1, int(vmax)+2))
+        ax.bar(edges[:-1], h, width=np.diff(edges), align="edge", alpha=1, label="All")     
+        ax.set_title(f"Panel {panel.id} - nhits")
+        ax.set_xlabel("Number of hits")
+        ax.set_ylabel("Entries")    
+    file_out = dir_out / "hit_multiplicity.png"
+    fig.savefig(file_out, bbox_inches="tight", dpi=200)
+    print(f"Save {file_out}")

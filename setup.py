@@ -4,7 +4,7 @@
 from setuptools import setup, find_packages
 
 REQUIREMENTS = [
-    'iminuit', #fit in 'utils/functions.py'
+    # 'iminuit', #fit in 'utils/functions.py'
     'matplotlib',
     'mat73', #read v7.3 mat files
     'numba', #for multiprocessing
@@ -22,7 +22,7 @@ REQUIREMENTS = [
     'torch', #machine learning
     'tqdm', #process monitoring 
     'seaborn',#nice plot templates
-    'uproot', #to read, update, and write root file
+    # 'uproot', #to read, update, and write .root file
     'vtk', #3d model rendering
 ]
 

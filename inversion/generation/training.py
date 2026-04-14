@@ -154,11 +154,11 @@ if __name__ == "__main__":
         "model": dir_survey / "model",
         "tel": dir_survey / "telescope",
     }
-    dirs["synth"] = dirs["model"] / "synthetic"
-    dirs["train"] = dirs["synth"] / "training"
+    dirs["post"] = dirs["model"] / "postreg"
+    dirs["train"] = dirs["post"] / "training"
     dirs["train"].mkdir(parents=True, exist_ok=True)
     input_data = dirs["train"] / "training_data.npz"
-    dirs["val"] = dirs["synth"] / "validation"
+    dirs["val"] = dirs["post"] / "validation"
     dirs["val"].mkdir(parents=True, exist_ok=True)
     data = np.load(input_data)
     X = data["X"]

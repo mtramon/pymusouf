@@ -169,7 +169,7 @@ if __name__ == "__main__":
     dir_voxel = dir_survey / "voxel"
     dir_model = dir_survey / "model"
     dir_tel = dir_survey / "telescope"
-    dir_inv = dir_model / "inversion"
+    dir_inv = dir_model / "inversion" / "synthetic"
     dir_inv.mkdir(parents=True, exist_ok=True)
     vs = int(sys.argv[1]) if len(sys.argv) >1 else 32  # voxel size in m (edge length)
     # input_file = dir_voxel / f"topo_voi_vox{vs}m.vts"
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     D_1 = voxel_density * mask_voi  
     if D_1.max() < 1e3: 
         D_1 *= 1e3 # if density is in g/cm^3, convert to kg/m^3
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
     r, c = 0, 0
     data_concat = None
     M_concat = None
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     det_coords = [] 
     
     # basename = f"real_telescopes"   
-    # dtel = CURRENT_SURVEY.telescope
+    # dtel = CURRENT_SURVEY.telescopes
 
     basename = f"toy_telescopes_s9506"   
     fin_toytel = dir_tel / f"toy_telescopes_s9506_vox{vs}m.pkl"

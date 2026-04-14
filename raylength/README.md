@@ -1,0 +1,2 @@
+Methods to estimate the rays travel lengths in volcano from topography or volume.
+The results should be more precised than the "rays_length" estimate from voxelized model in ```inversion/build_voxel_ray_matrix.py```

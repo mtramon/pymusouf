@@ -13,8 +13,8 @@ modeling3d/scripts/old
 out/
 tracking/old
 test.py
-*/.old
-*/.tmp
+*.old
+*.tmp
 *.csv.gz
 files
 struct_link
@@ -23,3 +23,9 @@ data_link
 *cache.json
 *.npz
 *.png
+*.output
+*.save
+*.log
+*.h5
+*.hdf5
+*.json

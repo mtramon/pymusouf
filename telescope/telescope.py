@@ -153,6 +153,7 @@ class Telescope:
     survey : str = field(default_factory=lambda: "")
     min_plan :  int = field(default_factory=lambda: int)
     max_plan :  int = field(default_factory=lambda: int)
+    flipped : bool = field(default=False)
 
     def __post_init__(self, ): 
         self.configurations = {}
@@ -510,6 +511,7 @@ tel_OM.zenith = 76.6
 tel_OM.elevation = round(90.-tel_OM.zenith,1)
 tel_OM.site = "Fente du Nord - Soufrière"
 tel_OM.color = "orange"
+tel_OM.flipped = True
 
 chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
 chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
@@ -597,17 +599,19 @@ tel_SBR = Telescope(name=tel_name)
 
 tel_SBR.coordinates = np.array([643345.81, 1774030.46,1267])
 tel_SBR.azimuth = 297 #?
-tel_SBR.zenith = 80 #?
-tel_SBR.elevation = round(90.0-tel_BR.zenith, 1) #16
+tel_SBR.zenith = 85 #new 04/2026, before 80
+tel_SBR.elevation = round(90.0-tel_SBR.zenith, 1)
 tel_SBR.site = "Rocher Fendu - Soufrière"
 tel_SBR.color = "red"
-
+ 
 channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
 front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
+middle1_panel = Panel(matrix = matrixv1_1, id=1,#2, 
+                      position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
 front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
 
-middle2_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
+middle2_panel = Panel(matrix = matrixv1_1, id=2, #1,
+                      position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
 rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
 middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
 conf_name = '3p1'
@@ -632,19 +636,18 @@ tel_SBR.pmts = Config_4p_16x16.pmts
 tel_name = 'SXF'
 tel_SXF = Telescope(name=tel_name)
 
-tel_SXF.coordinates = np.array([643109,1773943,1275.9]) #?
+tel_SXF.coordinates = np.array([643109,1773943,1275.9]) 
 tel_SXF.azimuth = 352.0 #?
-tel_SXF.zenith = 90-27 #?
-tel_SXF.elevation = round(90.0-tel_BR.zenith, 1) #16
+tel_SXF.zenith = 70 #new 04/2026, before 73
+tel_SXF.elevation = round(90.0-tel_SXF.zenith, 1) 
 tel_SXF.site = "Faille du 30 Août - Soufrière"
 tel_SXF.color = "purple"
 
 channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
 front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
+middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
 front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
-
-middle2_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
+middle2_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
 rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
 middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
 conf_name = '3p1'

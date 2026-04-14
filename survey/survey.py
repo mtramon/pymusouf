@@ -25,7 +25,7 @@ class Survey:
     def __init__(self, name:str):
         self.name = name
         self.dem = Union[Path, str] #path to dem file
-        self.telescope = {} #tel: Telescope object
+        self.telescopes = {} #tel: Telescope object
         self.runs = {} #tel: path to data runsfiles
         # self.surface_grid = np.ndarray #shape : (3, m, n)
         # self.surface_center = None
@@ -81,7 +81,7 @@ def set_survey(name:str):
     DICT_SURVEY[name] = survey
     ltel = survey_yaml[name]["telescope"]
     for k,v in ltel.items(): 
-        if k in DICT_TEL: survey.telescope[k] = DICT_TEL[k] 
+        if k in DICT_TEL: survey.telescopes[k] = DICT_TEL[k] 
         else: print(f"Tel {k} not in DICT_TEL")
         runs = get_runs(v["run"])
         survey.runs[k] = runs

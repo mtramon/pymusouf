@@ -11,11 +11,14 @@ from matplotlib.gridspec import SubplotSpec
 from mpl_toolkits.mplot3d import axes3d
 import numpy as np
 import os
+import palettable
 import pandas as pd
 from pathlib import Path
 import sys
 from scipy.interpolate import griddata
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
+
+cm_batlow = palettable.scientific.sequential.Batlow_20.mpl_colormap
 
 def format_time(seconds):
     m, s = divmod(int(seconds), 60)
@@ -24,6 +27,7 @@ def format_time(seconds):
 
 def get_file_datetime(file:Path|str):
     if isinstance(file, str): file=Path(file)
+    if not file.exists(): return None #raise FileNotFoundError(f"{file} not found.")
     dt = datetime.fromtimestamp(file.stat().st_mtime)
     return dt
 
@@ -443,6 +447,27 @@ def check_array_order(arr: np.ndarray) -> str:
         return "F"
     else:
         return "None"
+
+def ask_yes_no(question, default="n"):
+    """Prompt the user with a yes/no question and return a boolean."""
+    default = default.lower()
+    choices = "Y/n" if default == "y" else "y/N"
+
+    while True:
+        try:
+            answer = input(f"{question} [{choices}]: ").strip().lower()
+        except EOFError:
+            return default == "y"
+
+        if answer == "":
+            return default == "y"
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+
+        print("Please answer with 'y' or 'n'.")
+
 
 if __name__=="__main__":
     

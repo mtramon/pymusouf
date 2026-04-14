@@ -177,7 +177,7 @@ if __name__ == "__main__":
         "tel": struct_dir/ "telescope",
     }
     basename_tel = "real_telescopes"
-    dtel = survey.telescope 
+    dtel = survey.telescopes 
     input_vts = dir_dem / "topo_roi.vts"
     reader = vtk.vtkXMLStructuredGridReader()
     reader.SetFileName(str(input_vts))
@@ -198,7 +198,7 @@ if __name__ == "__main__":
     
     ###Test read h5file
     tel_name = "SNJ"
-    tel = survey.telescope [tel_name]
+    tel = survey.telescopes [tel_name]
     tel = dtel[tel_name]
     ncols,nrows = len(tel.configurations),1
     with h5py.File(h5_path) as fh5: 

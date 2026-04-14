@@ -92,7 +92,7 @@ if __name__ == "__main__":
     if D_1.max() < 1e1: D_1 *= 1000 # if density is in g/cm^3, convert to kg/m^3
     
     basename = f"real_telescopes"   
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
 
     # basename = f"toy_telescopes_s9506"   
     # fin_toytel = dir_tel / f"toy_telescopes_s9506_vox{vs}m.pkl"
@@ -141,7 +141,7 @@ if __name__ == "__main__":
                 u, v = (u_edges[:-1] + u_edges[1:]) / 2, (v_edges[:-1] + v_edges[1:]) / 2
                 # size_panel = conf.panels[0].matrix.scintillator.length * 1e-3  # mm-> m
                 # G_uv = geometrical_acceptance(u_edges=u_edges, v_edges=v_edges, delta_z = conf.length_z*1e-3, Lx =size_panel, Ly =size_panel, nu_sr=10, nv_sr=10)
-                dtel = CURRENT_SURVEY.telescope
+                dtel = CURRENT_SURVEY.telescopes
                 # voxray_file = dir_voxel / f"voxel_ray_matrix_{tel.name}_{conf_name}_vox{vs}m.npz"
                 # voxray = np.load(voxray_file, allow_pickle=True) 
                 voxray = fh5[tel_name][conf_name]
@@ -256,9 +256,10 @@ if __name__ == "__main__":
                     _a.set_ylabel("tan($\\theta_y$)")
                     _a.label_outer()
                 r+=1
-    cb.ax.tick_params(which="both", labelsize="x-large",pad=1)   
-    dout = dir_voxel / "images"
-    dout.mkdir(exist_ok=True, parents=True) 
-    fout = dout / f"opacity_all_vox{vs}m.png"
-    fig.savefig(fout)
-    print(f"Saved opacity map to {fout}")
+    cb.ax.tick_params(which="both", labelsize="x-large",pad=1)  
+    plt.show()
+    # dout = dir_voxel / "png"
+    # dout.mkdir(exist_ok=True, parents=True) 
+    # fout = dout / f"opacity_all_vox{vs}m.png"
+    # fig.savefig(fout)
+    # print(f"Saved opacity map to {fout}")

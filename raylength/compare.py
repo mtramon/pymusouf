@@ -29,11 +29,11 @@ if __name__ == "__main__":
         "tel": struct_dir/ "telescope",
     }
     basename_tel = "real_telescopes"
-    dtel = survey.telescope 
+    dtel = survey.telescopes 
     input_vts = dir_dem / "topo_roi.vts"
 
     tel_name ="SB"
-    tel = survey.telescope [tel_name]
+    tel = survey.telescopes [tel_name]
     h5_path1 = dirs["voxel"] / f"{input_vts.stem}_{basename_tel}_rays_length.h5"
     h5_path2 = dirs["voxel"] / f"{input_vts.stem}_{basename_tel}_rays_length_fast.h5"
     ncols,nrows = len(tel.configurations),1

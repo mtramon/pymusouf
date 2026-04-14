@@ -100,9 +100,9 @@ if __name__ == "__main__":
         "model": dir_survey / "model",
         "tel": dir_survey / "telescope",
     }
-    dirs["dataset"] = dirs["model"] / "synthetic" / "dataset"
+    dirs["dataset"] = dirs["model"] / "postreg" / "dataset"
     dirs["dataset"].mkdir(parents=True, exist_ok=True)
-    dirs["train"] = dirs["model"] / "synthetic" / "training"
+    dirs["train"] = dirs["model"] / "postreg" / "training"
     dirs["train"].mkdir(parents=True, exist_ok=True)
 
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     mask_voi = geom.mask_voxel
 
     basename = "real_telescopes"
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
 
     basename = f"toy_telescopes_s9506"   
     fin_toytel = dirs["tel"] / f"toy_telescopes_s9506_vox{vs}m.pkl"

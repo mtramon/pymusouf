@@ -139,14 +139,14 @@ if __name__ == "__main__":
         "tel": struct_dir/ "telescope",
     }
     basename_tel = "real_telescopes"
-    dtel = survey.telescope 
+    dtel = survey.telescopes 
     
     input_vts = dir_voxel / "topo_voi_vox8m.vts"
     grid, geom = load_voxel_grid(input_vts)
 
-    # tel  = {"SNJ":survey.telescope ["SNJ"]}
+    # tel  = {"SNJ":survey.telescopes ["SNJ"]}
     tel_name ="SB"
-    tel = survey.telescope [tel_name]
+    tel = survey.telescopes [tel_name]
     h5_path = dirs["voxel"] / f"{input_vts.stem}_{basename_tel}_rays_length.h5"
     with h5py.File(h5_path, "w") as fh5:
         # for i, tel in tqdm(enumerate(dtel.values()), total=len(dtel), desc="Telescopes"):

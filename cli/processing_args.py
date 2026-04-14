@@ -18,6 +18,15 @@ def set_processing_parser():
                         default=saved_args.get("nevents", int(1e4)), 
                         help="Max number of events to reconstruct", 
                         type=int)
+    parser.add_argument('--ndisplays', '-nd', 
+                        default=saved_args.get("ndisplays", 0), 
+                        help="Number of events to display", 
+                        type=int)
+    parser.add_argument('--adc_calibration', '-ac', 
+                        help="Whether to perform ADC calibration (1) or not (0)", 
+                        default=saved_args.get("adc_calibration", 1), type=int,
+                        # action='store_true',
+                        )
     parser.add_argument(
         '--tracking_type', 
         default=saved_args.get("tracking_type", "ransac"),
@@ -38,7 +47,7 @@ def set_processing_parser():
 
 def set_ransac_args(parser, saved_args={}):
     parser.add_argument('--residual_threshold', '-rt', 
-                        default=saved_args.get("residual_threshold", 1), 
+                        default=saved_args.get("residual_threshold", 50), 
                         help="Distance-to-model parameter in pixel unit",
                         type=float)
     parser.add_argument('--min_samples', '-ms', 

@@ -721,7 +721,7 @@ if __name__ == "__main__":
     vs = int(sys.argv[1]) if len(sys.argv) > 1 else 32  # voxel size in m (edge length)
     # input_vtk = dir_model / f"ElecCond_topo_voi_vox{vs}m.vts"
     input_vtk = dir_voxel / f"topo_voi_vox{vs}m.vts"          # Fichier VTK d'entrée (grille structurée avec masque)
-    dir_out = dir_model / "synthetic" / "dataset"      # Dossier de sortie
+    dir_out = dir_model / "postreg" / "dataset"      # Dossier de sortie
     dir_out.mkdir(parents=True, exist_ok=True)
     log_file = dir_out / f"log_s{SEED}.json"
     random.seed(SEED)

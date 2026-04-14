@@ -12,7 +12,11 @@ import os
 from matplotlib.gridspec import GridSpec
 import scipy.special as sc #binomial coef
 # import pylandau #python <= v3.7
-import iminuit
+# import iminuit
+from scipy.stats import moyal, norm
+from scipy.signal import fftconvolve
+from scipy.optimize import curve_fit
+
 
 
 def gaus(x,amp,x0,sigma):
@@ -47,6 +51,26 @@ def smooth_window(x, xmax, width_frac=.05):
         return 0.0
     t = (xmax - abs(x)) / w
     return 0.5 * (1 - np.cos(np.pi * t))
+
+def langau(x, mpv, eta, sigma, A):
+    """
+    Landau (Moyal) convoluée avec Gauss
+    N.B. Bias on the peak position (MPV) due to convolution, but it is a common approach to fit Landau-like distributions with a Gaussian smearing.
+    mpv   : position (MPV)
+    eta   : largeur Landau
+    sigma : sigma gaussien
+    A     : amplitude
+    """
+    # grille fine
+    dx = x[1] - x[0]
+    x_ext = np.linspace(x.min()-5*sigma, x.max()+5*sigma, len(x)*2)
+    landau = moyal.pdf(x_ext, loc=mpv, scale=eta)
+    gauss  = norm.pdf(x_ext, loc=0, scale=sigma)
+    conv = fftconvolve(landau, gauss, mode='same') * dx
+    # recentrer
+    conv = conv[len(conv)//4: len(conv)//4 + len(x)]
+    return A * conv
+
 
 # def fit_landau_migrad(x, y, p0, limit_mpv, limit_eta, limit_sigma, limit_A):
 #     def minimizeMe(mpv, eta, sigma, A):

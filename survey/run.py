@@ -21,7 +21,7 @@ class Run:
         
     def make_dirs(self):
         self.dirs={}
-        list_subdirs = ["raw", "reco", "log", "png", "npy", "pkl"]
+        list_subdirs = ["raw", "reco", "log", "png", "npy", "pkl", "json"]
         for sd in list_subdirs: 
             subdir = self.path / sd
             subdir.mkdir(parents=True, exist_ok=True)

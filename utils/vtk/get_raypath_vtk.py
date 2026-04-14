@@ -22,7 +22,7 @@ if __name__=="__main__":
     survey_name = CURRENT_SURVEY.name   
     dir_survey = STRUCT_DIR / survey_name
 
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
     # dtel = {"OM":DICT_TEL["OM"]}
    
     for tel_name, tel in tqdm(dtel.items(), desc="Raypath"):

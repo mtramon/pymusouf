@@ -162,7 +162,7 @@ if __name__ == "__main__":
     z_edges = np.unique(pts[:, 2])
     print(f"Grid dimensions: {len(x_edges)-1} x {len(y_edges)-1} x {len(z_edges)-1} voxels")
 
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
     det_positions = np.array([tel.coordinates for _,tel in dtel.items()])
 
     new_pos, moved = adjust_detectors_height(

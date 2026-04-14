@@ -123,7 +123,7 @@ if __name__ == "__main__" :
         # toy.compute_angular_coordinates()
         dict_toy[name] = toy
     fout_pkl = dir_tel / f"{fout_vtk.stem}.pkl"
-    # dict_toy = CURRENT_SURVEY.telescope
+    # dict_toy = CURRENT_SURVEY.telescopes
     # fout_pkl = dir_tel / f"true_telescopes_vox{vs}m.pkl"
     with open(fout_pkl, 'wb') as f:
         pickle.dump(dict_toy, f)

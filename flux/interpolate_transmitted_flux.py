@@ -40,7 +40,7 @@ if __name__=="__main__":
     dir_flux = dir_survey / "flux"
     dir_tel = dir_survey / "telescope"
 
-    dict_tel = CURRENT_SURVEY.telescope
+    dict_tel = CURRENT_SURVEY.telescopes
     tel = dict_tel["SNJ"]
     conf = tel.configurations["3p1"]
     tel.compute_angular_coordinates()
@@ -49,14 +49,23 @@ if __name__=="__main__":
     nu, nv = len(u_edges)-1, len(v_edges)-1
 
     theta_os_tel = tel.zenith_os_matrix[conf.name]
-    print(np.rad2deg(theta_os_tel))
 
     fluxop_file = dir_flux / 'IntegralFluxVsOpAndZaStructure_Corsika.mat'
     fluxop_grid = sio.loadmat(str(fluxop_file))['IntegralFluxVsOpAndZaStructure_rock_MuonsEKin_onlyModel'] 
     print_file_datetime(fluxop_file)
     fluxos_file = dir_flux / "openSkyFluxStructure.mat"
-    theta_os_grid = sio.loadmat(str(fluxos_file))["openSkyFluxStructure"][0][0][0].ravel() * np.pi/180
-    flux_os_grid = sio.loadmat(str(fluxos_file))["openSkyFluxStructure"][0][0][1].ravel() #
+    fluxos_struct = sio.loadmat(str(fluxos_file))["openSkyFluxStructure"][0][0] 
+    print(len(fluxos_struct), fluxos_struct[0].shape, fluxos_struct[1].shape, fluxos_struct[2].shape)
+    # fig, axs = plt.subplots(ncols=3)
+    # axs[0].plot(np.rad2deg(fluxos_struct[0].ravel()), fluxos_struct[1].ravel())
+    # axs[1].plot(np.rad2deg(fluxos_struct[0].ravel()), fluxos_struct[2].ravel()) 
+    # plt.show()
+    # plt.close()
+
+    k = "openSkyFluxStructure"
+    theta_os_grid = fluxos_struct[0].ravel() * np.pi/180
+    flux_os_grid = fluxos_struct[1].ravel() #
+    uncflux_os_grid = fluxos_struct[2].ravel() #
     func = interpolate.interp1d(theta_os_grid, flux_os_grid)  
     flux_os_tel= func(theta_os_tel)
     flux_os_tel= np.interp(theta_os_tel, theta_os_grid, flux_os_grid)
@@ -65,11 +74,6 @@ if __name__=="__main__":
     fluxos_file = dir_tel /tel.name / "flux"/ f"ExpectedOpenSkyFlux.mat"
     flux_os_grid = sio.loadmat(str(fluxos_file))[f"ExpectedFlux_calib_{conf.name[:-1]}"]
     print("ExpectedOpenSkyFlux:", np.nanmin(flux_os_grid),np.nanmax(flux_os_grid))
-
-    # print(theta_os_tel[:10, 0])
-    # print(theta_os_grid[:10])
-    # print(flux_os_grid[:10])
-    # print(flux_os_tel[:10])
 
     model="guan"
     fout_npy = dir_flux/ f"flux_opensky_{model}_{tel.name}_{conf.name}.npy"
@@ -87,7 +91,6 @@ if __name__=="__main__":
     fig.savefig(fout_png)
     print(f"Saved {fout_png}")
     # print(flux_os_tel)    
-    exit()
     # print(flux_os_grid)
     # fluxos_file = dir_flux / "ExpectedOpenSkyFlux.mat"
     # fluxos_grid = sio.loadmat(str(fluxop_file))['ExpectedOpenSkyFlux'] 

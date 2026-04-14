@@ -379,7 +379,7 @@ if __name__=="__main__":
             np.savez(fout_flux_npy, flux=flux, emin=emin, model=model, theta=theta, opacity=opacity, )
             print(f"Saved {fout_flux_npy}")
 
-    dict_tel = CURRENT_SURVEY.telescope
+    dict_tel = CURRENT_SURVEY.telescopes
     tel = dict_tel["SNJ"]
     conf = tel.configurations["3p1"]
     u_edges, v_edges = conf.u_edges, conf.v_edges

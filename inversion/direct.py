@@ -93,7 +93,7 @@ if __name__ == "__main__":
         D_1 *= 1e3 # if density is in g/cm^3, convert to kg/m^3
 
     basename = f"real_telescopes"   
-    dtel = CURRENT_SURVEY.telescope
+    dtel = CURRENT_SURVEY.telescopes
 
     # basename = f"toy_telescopes_s9506"   
     # fin_toytel = dir_tel / f"toy_telescopes_s9506_vox{vs}m.pkl"
