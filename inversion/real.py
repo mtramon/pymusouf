@@ -64,7 +64,8 @@ if __name__ == "__main__":
         with h5py.File(h5file_raylength, "r") as fh5_raylength: 
         
             for tel_name, tel in tqdm(dtel.items(), desc="Data"):
-        
+                if tel_name == "SXF":
+                    continue
                 h5file_muo = DATA_DIR / tel.name / f"muography.h5"
                 tel.compute_angular_coordinates()
                 det_coords.append(tel.coordinates)

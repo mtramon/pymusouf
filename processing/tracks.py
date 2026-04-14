@@ -38,11 +38,11 @@ if __name__ == "__main__":
     )
 
     in_dir = run.dirs["raw"]
+    print(in_dir)
     raw = RawData(path=in_dir)
     raw.fill_dataset(nfiles=int(args.nfiles))
     print(f"file0 : {raw.dataset[0]}")
     print(f"Read nfiles / tot : {len(raw.dataset)} / {raw.nfiles_tot}")
-    
     adc_ref = None
     if args.adc_calibration:
         '''

@@ -1,48 +1,44 @@
-
-soufriere: 
-  dem: /Users/raphael/structure/soufriere/dem/topo_roi.vts
+soufriere:
+  dem: soufriere/dem/topo_roi.vts
   telescope:
-    SB: 
+    SB:
       run:
-        tomo: /Users/raphael/data/SB/3dat/tomo
-        calib: /Users/raphael/data/SB/3dat/calib
-       
-    SNJ: 
-      run:
-        tomo: /Users/raphael/data/SNJ/Tomo2
-        calib: /Users/raphael/data/SNJ/CALIB2
-    
-    
-    SXF: 
-      run:
-        tomo: /Users/raphael/data/SXF/tomo/2023/27aug2023-12oct2023 
-        calib: /Users/raphael/data/SXF/calib/SXF_FD30A_TomoZen00_CALIB1_ABoff
-    
-    BR: 
-      run:
-        tomo_3dat_2015: /Users/raphael/data/BR/3dat/tomo/2015
-        tomo_3dat_2016: /Users/raphael/data/BR/3dat/tomo/2016
-        tomo_3dat_2017:  /Users/raphael/data/BR/3dat/tomo/2017
-        tomo_2017: /Users/raphael/data/BR/Tomo6/2017
-        tomo_2018: /Users/raphael/data/BR/Tomo6/2018
-        tomo_2019: /Users/raphael/data/BR/Tomo6/2019
-        calib: /Users/raphael/data/BR/Calib10
-  
-    SBR: 
-      run:
-        tomo: /Users/raphael/data/SBR/tomo/2023
-        calib: /Users/raphael/data/SBR/calib/SBR_RF_TomoZen00_CALIB1_ABoff
+        tomo: soufriere/SB/tomo
+        calib: soufriere/SB/calib
 
-    OM: 
+    SNJ:
       run:
-        tomo: /Users/raphael/data/OM/3dat/tomo
-        calib: /Users/raphael/data/OM/3dat/calib
-       
+        tomo: soufriere/SNJ/tomo
+        calib: soufriere/SNJ/calib
 
-copahue: 
-  dem: /Users/raphael/structure/copahue/dem/copahue_surface_5m.npy
+    SXF:
+      run:
+        tomo: soufriere/SXF/tomo
+        calib: soufriere/SXF/calib
+
+    BR:
+      run:
+        tomo_2015: soufriere/BR/tomo_2015
+        tomo_2016: soufriere/BR/tomo_2016
+        tomo_2017: soufriere/BR/tomo_2017
+        tomo_2018: soufriere/BR/tomo_2018
+        tomo_2019: soufriere/BR/tomo_2019
+        calib: soufriere/BR/calib
+
+    SBR:
+      run:
+        tomo: soufriere/SBR/tomo
+        calib: soufriere/SBR/calib
+
+    OM:
+      run:
+        tomo: soufriere/OM/tomo
+        calib: soufriere/OM/calib
+
+copahue:
+  dem: copahue/dem/copahue_surface_5m.npy
   telescope:
     COP:
       run:
-        tomo: 
-        calib: 
+        tomo: copahue/COP/tomo
+        calib: copahue/COP/calib

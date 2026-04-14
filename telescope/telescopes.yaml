@@ -1,0 +1,241 @@
+matrices:
+  v1_1:
+    version: "1.1"
+    scintillator:
+      type: Fermilab
+      length_mm: 800
+      width_mm: 50
+      thickness_mm: 7
+    nbars_x: 16
+    nbars_y: 16
+    wls_type: BCF91A
+    fiber_out: TR644 POM
+
+  v2_0:
+    version: "2.0"
+    scintillator:
+      type: JINR
+      length_mm: 800
+      width_mm: 25
+      thickness_mm: 7
+    nbars_x: 32
+    nbars_y: 32
+    wls_type: Y11
+    fiber_out: TR644 POM
+
+telescopes:
+  BR:
+    survey: soufriere
+    site: Rocher Fendu - Soufrière
+    color: red
+    coordinates_utm_m: [643345.81, 1774030.46, 1267.0]
+    azimuth_deg: 297.0
+    zenith_deg: 80.0
+    flipped: false
+    mappings:
+      map32: soufriere/BR/channel_bar_map/mapping32x32.json
+      map16: soufriere/BR/channel_bar_map/mapping16x16.json
+    configurations:
+      3p1:
+        panels:
+          - id: 23
+            matrix: v2_0
+            mapping: map32
+            position: Front
+            index: 0
+            z_mm: 0
+          - id: 24
+            matrix: v1_1
+            mapping: map16
+            position: Middle1
+            index: 1
+            z_mm: 600
+          - id: 25
+            matrix: v2_0
+            mapping: map32
+            position: Rear
+            index: 2
+            z_mm: 1200
+
+  COP:
+    survey: copahue
+    site: Copahue
+    color: grey
+    coordinates_utm_m: [310722.14, 5808130.41, 2543.0]
+    azimuth_deg: 262.0
+    zenith_deg: 86.0
+    flipped: false
+    mappings:
+      map32: copahue/COP/channel_bar_map/mapping32x32.json
+      map16: copahue/COP/channel_bar_map/mapping16x16.json
+    configurations:
+      3p1:
+        panels:
+          - id: 0
+            matrix: v2_0
+            mapping: map32
+            position: Front
+            index: 0
+            z_mm: 0
+          - id: 1
+            matrix: v1_1
+            mapping: map16
+            position: Middle1
+            index: 1
+            z_mm: 600
+          - id: 2
+            matrix: v2_0
+            mapping: map32
+            position: Rear
+            index: 2
+            z_mm: 1200
+
+  OM:
+    survey: soufriere
+    site: Fente du Nord - Soufrière
+    color: orange
+    coordinates_utm_m: [642954.802937528, 1774560.94061667, 1346.1]
+    azimuth_deg: 192.0
+    zenith_deg: 76.6
+    flipped: true
+    mappings:
+      map32: soufriere/OM/channel_bar_map/mapping32x32.json
+      map16: soufriere/OM/channel_bar_map/mapping16x16.json
+    configurations:
+      3p1:
+        panels:
+          - id: 0
+            matrix: v2_0
+            mapping: map32
+            position: Front
+            index: 0
+            z_mm: 0
+          - id: 1
+            matrix: v1_1
+            mapping: map16
+            position: Middle1
+            index: 1
+            z_mm: 600
+          - id: 2
+            matrix: v2_0
+            mapping: map32
+            position: Rear
+            index: 2
+            z_mm: 1200
+
+  SB:
+    survey: soufriere
+    site: Savane-à-mulets - Soufrière
+    color: blue
+    coordinates_utm_m: [642611.084416928, 1773797.5200942, 1185.0]
+    azimuth_deg: 40.0
+    zenith_deg: 79.0
+    flipped: false
+    mappings:
+      map32: soufriere/SB/channel_bar_map/mapping32x32.json
+      map16: soufriere/SB/channel_bar_map/mapping16x16.json
+    configurations:
+      3p1:
+        panels:
+          - id: 26
+            matrix: v2_0
+            mapping: map32
+            position: Front
+            index: 0
+            z_mm: 0
+          - id: 27
+            matrix: v1_1
+            mapping: map16
+            position: Middle1
+            index: 1
+            z_mm: 600
+          - id: 28
+            matrix: v2_0
+            mapping: map32
+            position: Rear
+            index: 2
+            z_mm: 1200
+
+  SNJ:
+    survey: soufriere
+    site: Parking - Soufrière
+    color: yellow
+    coordinates_utm_m: [642782.001377887, 1773682.54931093, 1143.0]
+    azimuth_deg: 18.0
+    zenith_deg: 74.9
+    flipped: false
+    mappings:
+      default: soufriere/SNJ/channel_bar_map/mapping.json
+    configurations:
+      3p1:
+        panels:
+          - {id: 9, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 10, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 11, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+      3p2:
+        panels:
+          - {id: 10, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 11, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 12, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}
+      4p:
+        panels:
+          - {id: 9, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 10, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 11, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 12, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}
+
+  SBR:
+    survey: soufriere
+    site: Rocher Fendu - Soufrière
+    color: red
+    coordinates_utm_m: [643345.81, 1774030.46, 1267.0]
+    azimuth_deg: 297.0
+    zenith_deg: 85.0
+    flipped: false
+    mappings:
+      default: soufriere/SBR/channel_bar_map/mapping.json
+    configurations:
+      3p1:
+        panels:
+          - {id: 0, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+      3p2:
+        panels:
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 3, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}
+      4p:
+        panels:
+          - {id: 0, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 3, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}
+
+  SXF:
+    survey: soufriere
+    site: Faille du 30 Août - Soufrière
+    color: purple
+    coordinates_utm_m: [643109.0, 1773943.0, 1275.9]
+    azimuth_deg: 352.0
+    zenith_deg: 70.0
+    flipped: false
+    mappings:
+      default: soufriere/SXF/channel_bar_map/mapping.json
+    configurations:
+      3p1:
+        panels:
+          - {id: 0, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+      3p2:
+        panels:
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 3, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}
+      4p:
+        panels:
+          - {id: 0, matrix: v1_1, mapping: default, position: Front, index: 0, z_mm: 0}
+          - {id: 1, matrix: v1_1, mapping: default, position: Middle1, index: 1, z_mm: 600}
+          - {id: 2, matrix: v1_1, mapping: default, position: Middle2, index: 2, z_mm: 1200}
+          - {id: 3, matrix: v1_1, mapping: default, position: Rear, index: 3, z_mm: 1800}

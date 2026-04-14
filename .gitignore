@@ -28,4 +28,14 @@ data_link
 *.log
 *.h5
 *.hdf5
-*.json
+*/reco
+sample/*/*/*/json
+sample/*/*/*/log
+sample/*/*/*/npy
+sample/*/*/*/png
+sample/*/*/*/pkl
+sample/*/*/*/reco
+
+
+
+

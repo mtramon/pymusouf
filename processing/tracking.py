@@ -695,10 +695,10 @@ class RansacTracking(Tracking):
 
         # hits_ev = np.column_stack((xyz_ev, (adc_ev[:,0]+adc_ev[:,1])/2))
         hits_ev =  np.column_stack((xyz_ev, adc_ev[:,0], adc_ev[:,1]))
-        z_planes = np.unique(xyz_ev[:, 2])
+        z_ev = np.unique(xyz_ev[:, 2])
         hits_by_plane = {
             int(z): hits_ev[hits_ev[:, 2] == z]
-            for z in z_planes
+            for z in z_ev
         }
         # ----------------------------------
         # MULTIPLICITE PAR PANNEAU
@@ -721,24 +721,18 @@ class RansacTracking(Tracking):
             if len(np.unique(hits_cfg[:, 2])) < 3:
                 continue
             # ----------------------------------
-            # 2. NORMALISATION
+            # 2. Conversion indices barreaux -> mm + jitter contrôlé
             # ----------------------------------
             xyz_cfg = hits_cfg[:, :3]
             adc_cfg = hits_cfg[:, 3:]
             adc_cfg = np.asarray(adc_cfg)
             
-            # xyz_norm, w_norm = normalize_xy_coords(xyz_cfg, 
-            #                             pitch_xy=self.pitch_xy, 
-            #                             pitch_ref=self.pitch_ref)
             xyz_cfg_mm = convert_bar_to_mm(
                 xyz_cfg,
                 self.arr_scint_width,   # pitch par plan
                 self.arr_z_mm           # position Z en mm
             )
 
-            # xyz_jit = apply_jitter(xyz_cfg_mm, scale=0.5) #jitter pour éviter les problèmes de colinéarité parfaite
-            # w_norm = None
-            # xyz_jit = apply_jitter(xyz_cfg, scale=0.5)
             z_cfg = xyz_cfg[:, 2].astype(int)
             pitch = self.arr_scint_width[z_cfg]
             sigma_jitter = pitch / np.sqrt(12)
@@ -746,15 +740,10 @@ class RansacTracking(Tracking):
             xyz_mm_jit = xyz_cfg_mm.copy()
             xyz_mm_jit[:, 0] += np.random.normal(0, sigma_jitter)
             xyz_mm_jit[:, 1] += np.random.normal(0, sigma_jitter)
-            # if np.any(xyz_jit[:,0:2] <= 0.5): 
-            #     print("evt.id:",evt.id)
-            #     # print("xyz_norm_init:", xyz_norm_init)
-            #     print("xyz_jit:",xyz_jit)
-            # xyz_norm = xyz_cfg.copy()
-            # hits_norm_jit = np.column_stack((xyz_norm_jit, adc_cfg)) #reconstruction de l'array hits avec les coordonnées normalisées et le adc
+
             use_ransac = True
             # ----------------------------------
-            #  RANSAC 
+            #  3. RANSAC 
             # ----------------------------------
             if use_ransac:
                 ransac_result = self.ransac_model.fit(xyz_mm_jit)
@@ -764,34 +753,31 @@ class RansacTracking(Tracking):
                 continue
                 
             rms_ransac = model["rms"]
+           
+            # ----------------------------------
+            # 4. INLIERS
+            # ----------------------------------
             inliers_idx = model["inliers_idx"]
             xyz_inliers = xyz_cfg[inliers_idx]
             xyz_inliers_mm = xyz_mm_jit[inliers_idx]
-            # ----------------------------------
-            # 5. INLIERS
-            # ----------------------------------
             z_inliers = xyz_inliers[:,2]
             if len(np.unique(z_inliers)) < 3:
                 continue
-            # if len(xyz_inliers) < 3: continue
-            # xyz_inliers = hits_cfg[inliers_idx]
+        
             # ----------------------------------
-            # 6. CONVERSION MM
-            # ----------------------------------
-            xyz_cfg_mm = convert_bar_to_mm(
-                xyz_cfg,
-                self.arr_scint_width,
-                self.arr_z_mm, 
-            )
-
-
-            # ----------------------------------
-            # 7. REFIT FINAL
+            # 5. REFIT FINAL
             # ----------------------------------
             p0_ransac, v_ransac = fast_line_fit_2d(xyz_inliers_mm)
             p0_fin, v_fin = p0_ransac, v_ransac
+            p0_weight, v_weight = p0_fin, v_fin
+            rms_weight = rms_ransac
+            rms_fin = rms_ransac
             
             mip_score_x, mip_score_y = 0, 0
+            
+            # ----------------------------------
+            # 6. ADC WEIGHTED FIT
+            # ----------------------------------
             if self.adc_ref is not None:           
                 adc_inliers = adc_cfg[inliers_idx] 
                 mpv_x = np.array([self.adc_ref[z]["x"]["mpv"] for z in z_inliers])
@@ -805,10 +791,8 @@ class RansacTracking(Tracking):
                 # xyz_inliers_rear = xyz_inliers[np.argmax(xyz_inliers[:, 2])]
                 # rms_weight = np.sqrt(np.mean(np.linalg.norm(np.cross(np.vstack([xyz_inliers_front, xyz_inliers_rear]) - p0_weight, v_weight), axis=1)**2))
                 rms_weight = compute_rms(xyz_inliers_mm, p0_weight, v_weight)
-
                 p0_fin, v_fin = p0_weight, v_weight
                 rms_fin = rms_weight
-
                 # Approximation : même ADC projeté sur X et Y
                 adc_x, adc_y = adc_inliers[:,0], adc_inliers[:,1]
                 zscore_x = (adc_x - mpv_x) / (sigma_x + 1e-6)
@@ -819,30 +803,26 @@ class RansacTracking(Tracking):
                 mip_score_x = np.exp(-0.5 * chi2_x)
                 mip_score_y = np.exp(-0.5 * chi2_y)
 
-            # if evt.id == 416:
-            #     print(f"Event {evt.id} | Config {cfg_name} | MIP score X: {mip_score_x:.3f} | MIP score Y: {mip_score_y:.3f}")
-            #     print(f"  Inliers Z: {z_inliers}")
-            #     print(f"  xyz inliers (mm): {xyz_inliers_mm.tolist()}")
-            
+    
             if abs(v_fin[2]) < 1e-12:
                 continue
+            # Track angular coordinates : tan(theta_x) = dx/dz, tan(theta_y) = dy/dz
             dz = v_fin[2] 
             dx_dz = v_fin[0] / dz
             dy_dz = v_fin[1] / dz
-            # ----------------------------------
-            # 7. OUTPUT
-            # ----------------------------------
-            pts = self.intersections(p0_weight, v_weight, cfg_name)  # shape (n_planes, 3)
+            pts = self.intersections(p0_fin, v_fin, cfg_name)  # shape (n_planes, 3)
             inside = int(
                 np.all(
-                    (pts[:, 0] >= 0) & (pts[:, 0] <= 800) &
-                    (pts[:, 1] >= 0) & (pts[:, 1] <= 800)
+                    (0 <= pts[:, 0]) & (pts[:, 0] <= 800) &
+                    (0 <= pts[:, 1]) & (pts[:, 1] <= 800)
                 )
-            ) #check if all intersection points are contained in telescope panels 
-        
+            ) #check if all intersection points are contained in the configuration panels 
             if not inside: 
                 continue
             
+            # ----------------------------------
+            # 7. OUTPUT
+            # ----------------------------------
             rows.append((
                         evt.id,
                         int(evt.timestamp.s),
@@ -863,13 +843,14 @@ class RansacTracking(Tracking):
                 # ----------------------------------
                 # BARYCENTRE PONDERE PAR ADC
                 # ----------------------------------
-                xyz_bary, weights_cfg_x, weights_cfg_y = barycenter_per_plane_2d(xyz_cfg, adc_cfg, self.adc_ref)
-                
-                xyz_bary_mm = convert_bar_to_mm(
-                                xyz_bary,
-                                self.arr_scint_width,
-                                self.arr_z_mm
-                            )
+                xyz_bary_mm,weights_cfg_x, weights_cfg_y = None, None,None
+                if self.adc_ref is not None:
+                    xyz_bary, weights_cfg_x, weights_cfg_y = barycenter_per_plane_2d(xyz_cfg, adc_cfg, self.adc_ref)
+                    xyz_bary_mm = convert_bar_to_mm(
+                                    xyz_bary,
+                                    self.arr_scint_width,
+                                    self.arr_z_mm
+                                )
                 plots.append ((
                     evt.id,
                     cfg_name,
@@ -929,6 +910,7 @@ def fast_line_fit_2d(xyz):
     return p0, v
 
 def compute_adaptive_threshold(xyz_mm, z_planes, arr_scint_width):
+    # A TESTER : seuil adaptatif par plan en fonction de la résolution locale (pitch) et de l’angle d’incidence
     # sigma par hit
     sigma_xy = arr_scint_width[z_planes] / np.sqrt(12)
     # fit rapide
@@ -989,15 +971,17 @@ def save_event_2d(event_id, config_data, output_dir, z_panels=None, adc_ref=None
         if i == 0 : 
             ax_xz.scatter(
             xyz_cfg_mm[:,0], xyz_cfg_mm[:,2],
-            alpha=0.6, color="darkgrey", edgecolor="black", linewidth=0.5, label="Hits with weights", 
+            alpha=0.6, color="darkgrey", edgecolor="black", linewidth=0.5, label="Hits with weights" if weights_cfg_x is not None else "Hits", 
             sizes=sizes_xz,
-        )
-            for j, (x, z) in enumerate(zip(xyz_cfg_mm[:,0], xyz_cfg_mm[:,2])):
-                ax_xz.text(x, z-50, f"{weights_cfg_x[j]:.2f}", fontsize=6, ha="center", va="bottom", color="black", alpha=0.7)
-            ax_xz.scatter(
-            xyz_bary_mm[:,0], xyz_bary_mm[:,2],
-            marker="X", s=100, alpha=0.8, color="orange", edgecolor="black", linewidth=1.5, label="Barycenter",  
-        )
+        )   
+            if weights_cfg_x is not None:
+                for j, (x, z) in enumerate(zip(xyz_cfg_mm[:,0], xyz_cfg_mm[:,2])):
+                    ax_xz.text(x, z-50, f"{weights_cfg_x[j]:.2f}", fontsize=6, ha="center", va="bottom", color="black", alpha=0.7)
+            if xyz_bary_mm is not None:
+                ax_xz.scatter(
+                xyz_bary_mm[:,0], xyz_bary_mm[:,2],
+                marker="X", s=100, alpha=0.8, color="orange", edgecolor="black", linewidth=1.5, label="Barycenter",  
+            )
         ax_xz.scatter(
             xyz_cfg_mm[mask_inliers][:,0], xyz_cfg_mm[mask_inliers][:,2],
             s=sizes_xz[mask_inliers], alpha=0.6, color=color,
@@ -1026,15 +1010,17 @@ def save_event_2d(event_id, config_data, output_dir, z_panels=None, adc_ref=None
         if i == 0 : 
             ax_yz.scatter(
                 xyz_cfg_mm[:,1], xyz_cfg_mm[:,2],
-                alpha=0.6, color="darkgrey", edgecolor="black", linewidth=0.5, label="Hits with weights", 
+                alpha=0.6, color="darkgrey", edgecolor="black", linewidth=0.5, label="Hits with weights" if weights_cfg_y is not None else "Hits", 
                 sizes=sizes_yz,
             )
-            for j, (y, z) in enumerate(zip(xyz_cfg_mm[:,1], xyz_cfg_mm[:,2])):
-                ax_yz.text(y, z-50, f"{weights_cfg_y[j]:.2f}", fontsize=6, ha="center", va="bottom", color="black", alpha=0.7)
-            ax_yz.scatter(
-                xyz_bary_mm[:,1], xyz_bary_mm[:,2],
-                marker="X", s=100, alpha=0.8, color="orange", edgecolor="black", linewidth=1.5, label="Barycenter",
-                
+            if weights_cfg_y is not None:
+                for j, (y, z) in enumerate(zip(xyz_cfg_mm[:,1], xyz_cfg_mm[:,2])):
+                    ax_yz.text(y, z-50, f"{weights_cfg_y[j]:.2f}", fontsize=6, ha="center", va="bottom", color="black", alpha=0.7)
+            if xyz_bary_mm is not None: 
+                ax_yz.scatter(
+                    xyz_bary_mm[:,1], xyz_bary_mm[:,2],
+                    marker="X", s=100, alpha=0.8, color="orange", edgecolor="black", linewidth=1.5, label="Barycenter",
+                    
             )
         ax_yz.scatter(
             xyz_cfg_mm[mask_inliers][:,1], xyz_cfg_mm[mask_inliers][:,2],
@@ -1094,52 +1080,6 @@ def scale_adc_to_size(adc, smin=5, smax=250, adc_range=[0,3000]):
     adc_norm = (adc - adc_range[0]) / (adc_range[1] - adc_range[0])
     return smin + adc_norm * (smax - smin)
 
-def barycenter_per_plane(xyz, adc, adc_ref, eps=1e-9):
-    """
-    Calcule la position barycentrique (x,y) pour chaque plan.
-
-    Parameters
-    ----------
-    xyz : ndarray (N,3)
-        Positions des hits (en mm ou indices convertis)
-    adc : ndarray (N,)
-        Valeurs ADC associées
-    adc_ref : dict
-        Références ADC par plan (ex: {0: {"mpv": 120, "sigma": 10}, 1: {"mpv": 95, "sigma": 8}, 2: {"mpv": 130, "sigma": 12}})
-    eps : float
-        Sécurité numérique
-
-    Returns
-    -------
-    bary : ndarray (M,3)
-        Positions barycentriques (x,y,z) pour chaque plan (M plans)
-    weights : ndarray (N,)
-        poids calculés pour chaque hit
-    """
-
-    xyz = np.asarray(xyz)
-    adc = np.asarray(adc)
-    z_planes = xyz[:,2]
-    z_unique = np.unique(z_planes)
-    # Poids gaussiens centrés sur la MPV du plan
-    adc_mpv_ref = np.array([ adc_ref.get(int(z), 1.0)["mpv"] for z in z_planes ])
-    # adc_norm = adc / (adc_mpv_ref + 1e-6)
-    # adc_med = np.median(adc_norm)
-    adc_sigma_ref = np.array([ adc_ref.get(int(z), 1.0)["sigma"] for z in z_planes ])  # tolérance MIP
-    # weights = np.exp(-0.5 * ((adc_norm - adc_med)/adc_sigma_ref)**2)
-    weights = 1.0 / (1.0 + ((adc - adc_mpv_ref) / adc_sigma_ref) ** 2)
-    # weights /= (weights.sum() + 1e-12)
-    # Calcul barycentres
-    bary = np.zeros((len(z_unique), 3))  # (n_planes, 2)
-    for i, z in enumerate(z_unique):
-        mask = z_planes == z
-        w = weights[mask]
-        w_sum = np.sum(w) + eps
-        x_bary = np.sum(xyz[mask, 0] * w) / w_sum
-        y_bary = np.sum(xyz[mask, 1] * w) / w_sum
-        bary[i] = (x_bary, y_bary, z)
-    return bary, weights
-
 def barycenter_per_plane_2d(xyz, adc, adc_ref, eps=1e-9):
     """
     Barycentre par plan avec poids séparés X/Y
@@ -1190,32 +1130,6 @@ def barycenter_per_plane_2d(xyz, adc, adc_ref, eps=1e-9):
 
     return bary, weights_x, weights_y
 
-def weighted_fit(xyz, weights):
-    w = weights / weights.sum()
-    centroid = np.sum(w[:,None] * xyz, axis=0)
-    X = xyz - centroid
-    cov = (w[:,None,None] * (X[:,:,None] @ X[:,None,:])).sum(axis=0)
-    _, _, vh = np.linalg.svd(cov)
-    direction = vh[0]
-    return centroid, direction
-
-def weighted_fit_mip(xyz_inliers_mm, z_inliers, adc_inliers, adc_ref:dict):
-    adc_mpv_ref = np.array([ adc_ref.get(int(z), 1.0)["mpv"] for z in z_inliers ])
-    # adc_norm = adc_inliers / (adc_mpv_ref + 1e-6)
-    adc_med = np.median(adc_mpv_ref)
-    sigma = np.array([ adc_ref.get(int(z), 1.0)["sigma"] for z in z_inliers ])  # tolérance MIP
-    weights = np.exp(-0.5 * ((adc_mpv_ref - adc_med)/sigma)**2)
-    weights /= (weights.sum() + 1e-12)
-    # weighted PCA
-    centroid = np.sum(weights[:,None] * xyz_inliers_mm, axis=0)
-    X = xyz_inliers_mm - centroid
-    cov = (weights[:,None,None] * (X[:,:,None] @ X[:,None,:])).sum(axis=0)
-    _, _, vh = np.linalg.svd(cov)
-    v = vh[0]
-    p0 = centroid
-    return p0, v, weights
-
-
 def weighted_line_fit_2d(xyz, adc, mpv_ref, sigma_ref, eps=1e-9):
     """
     Fit pondéré séparé XZ / YZ
@@ -1241,14 +1155,10 @@ def weighted_line_fit_2d(xyz, adc, mpv_ref, sigma_ref, eps=1e-9):
     y = xyz[:, 1]
     z = xyz[:, 2].astype(int)
 
-    # --- récupérer MPV / sigma ---
-    # mpv_x = np.array([adc_ref[zi]["x"]["mpv"] for zi in z_panels])
-    # sigma_x = np.array([adc_ref[zi]["x"]["sigma"] for zi in z_panels])
-
-    # mpv_y = np.array([adc_ref[zi]["y"]["mpv"] for zi in z_panels])
-    # sigma_y = np.array([adc_ref[zi]["y"]["sigma"] for zi in z_panels])
+    # --- récupérer MPV / sigma --- séparés X et Y
     mpv_x, mpv_y = mpv_ref[:,0], mpv_ref[:,1]
     sigma_x, sigma_y = sigma_ref[:,0], sigma_ref[:,1]
+    
     # --- poids robustes ---
     wx = 1.0 / (1.0 + ((adc_x - mpv_x) / (sigma_x + eps))**2)
     wy = 1.0 / (1.0 + ((adc_y - mpv_y) / (sigma_y + eps))**2)
@@ -1275,14 +1185,6 @@ def weighted_line_fit_2d(xyz, adc, mpv_ref, sigma_ref, eps=1e-9):
     p0 = np.array([x0, y0, z0])
 
     return p0, v
-
-
-def merge_adc_dicts(list_of_dicts, n_planes):
-    merged = {z: [] for z in range(n_planes)}
-    for d in list_of_dicts:
-        for z in range(n_planes):
-            merged[z].extend(d[z])
-    return merged
 
 def _tracking_chunk_static(chunk, config, dicts, models_config):
     tracker = config["tracker_class"](**config["init"])

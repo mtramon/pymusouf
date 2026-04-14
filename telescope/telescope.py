@@ -4,14 +4,19 @@
 import argparse
 from dataclasses import dataclass, field
 from enum import Enum, auto
-import matplotlib.axes 
-import numba
-import numpy as np 
 import json
+from pathlib import Path
 from typing import List
 
+import matplotlib.axes 
+import numpy as np 
+import yaml
+
 #package module(s)
-from config import STRUCT_DIR
+try:
+    from config import STRUCT_DIR
+except Exception:
+    STRUCT_DIR = Path(__file__).resolve().parents[1] / "struct_link"
 from utils import tools
 
 
@@ -435,241 +440,151 @@ class Telescope:
             return znew, True
         return z0, False
 
-scint_Fermi = Scintillator(type="Fermilab", length=800, width=50, thickness=7 )
-scint_JINR = Scintillator(type="JINR", length=800, width=25, thickness=7 )
-matrixv1_1 = Matrix(version="1.1",  scintillator=scint_Fermi, nbars_x=16, nbars_y=16, wls_type="BCF91A",fiber_out="TR644 POM")
-matrixv2_0 = Matrix(version="2.0",  scintillator=scint_JINR, nbars_x=32, nbars_y=32, wls_type="Y11",fiber_out="TR644 POM")
-
-survey_path = STRUCT_DIR
-souf_tel_path = survey_path / "soufriere" / "telescope"
-cop_tel_path  = survey_path / "copahue" / "telescope"
-
-##BR: BaronRouge GW Rocher Fendu 2015-2019 3 matrices = 1 * v1.1 + 2 * v2.0 (mapping might be wrong)
-tel_name = 'BR'
-tel_BR = Telescope(name=tel_name)
-
-tel_BR.coordinates = np.array([643345.81, 1774030.46,1267])
-tel_BR.azimuth = 297#295.
-tel_BR.zenith = 80#16.
-tel_BR.elevation = round(90.0-tel_BR.zenith, 1) #16
-tel_BR.site = "Rocher Fendu - Soufrière"
-tel_BR.color = "red"
-
-chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
-chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-id_front = 23
-front_panel = Panel(matrix = matrixv2_0, id=id_front, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
-front_pmt = PMT(id=id_front, panel=front_panel, channelmap=chmap32) 
-id_middle = 24
-middle1_panel = Panel(matrix = matrixv1_1, id=id_middle, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
-middle1_pmt = PMT(id=id_middle, panel=middle1_panel, channelmap=chmap16) 
-id_rear = 25
-rear_panel = Panel(matrix = matrixv2_0, id=id_rear, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
-rear_pmt = PMT(id=id_rear, panel=rear_panel, channelmap=chmap32) 
-conf_name = '3p1'
-Config_3p1_32x32 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, rear_panel],
-                               pmts=[front_pmt, middle1_pmt, rear_pmt])
-tel_BR[conf_name] = Config_3p1_32x32
-tel_BR.panels = Config_3p1_32x32.panels
-tel_BR.pmts = Config_3p1_32x32.pmts
-
-#####COPAHUE 
-tel_name = 'COP'
-tel_COP = Telescope(name=tel_name)
-
-tel_COP.coordinates = np.array([310722.14, 5808130.41, 2543.]) 
-tel_COP.azimuth = 262.0#295
-tel_COP.zenith = 86.0#16
-tel_COP.elevation = round(90.0-tel_COP.zenith,1)#16
-tel_COP.site = "Copahue"
-tel_COP.color = "grey"
-
-chmap32 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
-chmap16 = ChannelMap(file=str( cop_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, id=0, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
-front_pmt = PMT(id=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
-middle1_pmt = PMT(id=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, id=2, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
-rear_pmt = PMT(id=2, panel=rear_panel, channelmap=chmap32) 
-conf_name = '3p1'
-Config_3p1_32x32 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, rear_panel],
-                               pmts=[front_pmt, middle1_pmt, rear_pmt])
-tel_COP[conf_name] = Config_3p1_32x32
-tel_COP.panels = Config_3p1_32x32.panels
-tel_COP.pmts = Config_3p1_32x32.pmts
-
-#####OM: OrangeMecanique GW Fente du Nord 2017-2019 3 matrices = 1 * v1.1 + 2 * v2.0
-tel_name = 'OM'
-tel_OM = Telescope(name=tel_name)
-
-tel_OM.coordinates = np.array([642954.802937528, 1774560.94061667, 1344.6 + 1.5])
-tel_OM.azimuth = 192
-tel_OM.zenith = 76.6
-tel_OM.elevation = round(90.-tel_OM.zenith,1)
-tel_OM.site = "Fente du Nord - Soufrière"
-tel_OM.color = "orange"
-tel_OM.flipped = True
-
-chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
-chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, id=0, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
-front_pmt = PMT(id=0, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
-middle1_pmt = PMT(id=1, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, id=2, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
-rear_pmt = PMT(id=2, panel=rear_panel, channelmap=chmap32) 
-conf_name = '3p1'
-Config_3p1_32x32 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, rear_panel],
-                               pmts=[front_pmt, middle1_pmt, rear_pmt])
-tel_OM[conf_name] = Config_3p1_32x32
-tel_OM.panels = Config_3p1_32x32.panels
-tel_OM.pmts = Config_3p1_32x32.pmts
-
-#####SB: SacreBleu GW Savane-à-mulets (ouest NJ) 2017-2019 3 matrices = 1 * v1.1 + 2 * v2.0
-tel_name = 'SB'
-tel_SB = Telescope(name=tel_name)
-
-tel_SB.coordinates = np.array([642611.084416928, 1773797.5200942, 1185.])
-tel_SB.azimuth = 40.0#44.9
-tel_SB.zenith = 79.0#75
-tel_SB.elevation = round(90 - tel_SB.zenith ,1)
-tel_SB.site = "Savane-à-mulets - Soufrière"
-tel_SB.color = "blue"
-
-chmap32 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping32x32.json"))
-chmap16 = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping16x16.json"))
-front_panel = Panel(matrix = matrixv2_0, id=26, position=Position(PositionEnum.Front,0,0), channelmap=chmap32)
-front_pmt = PMT(id=26, panel=front_panel, channelmap=chmap32) 
-middle1_panel = Panel(matrix = matrixv1_1, id=27, position=Position(PositionEnum.Middle1,1,600), channelmap=chmap16)
-middle1_pmt = PMT(id=27, panel=middle1_panel, channelmap=chmap16) 
-rear_panel = Panel(matrix = matrixv2_0, id=28, position=Position(PositionEnum.Rear,2,1200), channelmap=chmap32)
-rear_pmt = PMT(id=28, panel=rear_panel, channelmap=chmap32) 
-conf_name = '3p1'
-Config_3p1_32x32 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, rear_panel],
-                               pmts=[front_pmt, middle1_pmt, rear_pmt])
-tel_SB[conf_name] = Config_3p1_32x32
-tel_SB.panels = Config_3p1_32x32.panels
-tel_SB.pmts = Config_3p1_32x32.pmts
-
-####SNJ: SuperNainJaune GW Parking 2019
-tel_name = 'SNJ'
-tel_SNJ = Telescope(name=tel_name)
-tel_SNJ.coordinates = np.array([642782.001377887, 1773682.54931093, 1143.])
-tel_SNJ.azimuth = 18.0#20.5#20
-tel_SNJ.zenith = 74.9#16
-tel_SNJ.elevation = round(90-tel_SNJ.zenith, 1)
-tel_SNJ.site = "Parking - Soufrière"
-tel_SNJ.color = "yellow"
-
-channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, id=9, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
-front_pmt = PMT(id=9, panel=front_panel, channelmap=channelmap) 
-middle1_panel = Panel(matrix = matrixv1_1, id=10, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
-middle1_pmt = PMT(id=10, panel=middle1_panel, channelmap=channelmap) 
-middle2_panel = Panel(matrix = matrixv1_1, id=11, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
-middle2_pmt = PMT(id=11, panel=middle2_panel, channelmap=channelmap) 
-rear_panel = Panel(matrix = matrixv1_1, id=12, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
-rear_pmt = PMT(id=12, panel=rear_panel, channelmap=channelmap) 
-conf_name = '3p1'
-Config_3p1_16x16 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, middle2_panel],
-                               pmts=[front_pmt, middle1_pmt, middle2_pmt])
-tel_SNJ[conf_name] = Config_3p1_16x16
-conf_name = '3p2'
-Config_3p2_16x16 = PanelConfig(name = conf_name,
-                               panels=[middle1_panel, middle2_panel, rear_panel],
-                               pmts=[middle1_pmt, middle2_pmt, rear_pmt])
-tel_SNJ[conf_name] = Config_3p2_16x16
-conf_name = '4p'
-Config_4p_16x16 = PanelConfig(name = conf_name, 
-                              panels=[front_panel, middle1_panel, middle2_panel, rear_panel],
-                              pmts=[front_pmt, middle1_pmt, middle2_pmt, rear_pmt])
-tel_SNJ[conf_name] = Config_4p_16x16
-tel_SNJ.panels = Config_4p_16x16.panels
-tel_SNJ.pmts = Config_4p_16x16.pmts
-
-##SBR: SuperBaronRouge GW Rocher Fendu 2021-2022 4 matrices = 4 * v1.1
-tel_name = 'SBR'
-tel_SBR = Telescope(name=tel_name)
-
-tel_SBR.coordinates = np.array([643345.81, 1774030.46,1267])
-tel_SBR.azimuth = 297 #?
-tel_SBR.zenith = 85 #new 04/2026, before 80
-tel_SBR.elevation = round(90.0-tel_SBR.zenith, 1)
-tel_SBR.site = "Rocher Fendu - Soufrière"
-tel_SBR.color = "red"
- 
-channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, id=1,#2, 
-                      position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
-front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
-
-middle2_panel = Panel(matrix = matrixv1_1, id=2, #1,
-                      position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
-rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
-middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
-conf_name = '3p1'
-Config_3p1_16x16 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, middle2_panel],
-                               pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SBR[conf_name] = Config_3p1_16x16
-conf_name = '3p2'
-Config_3p2_16x16 = PanelConfig(name = conf_name,
-                               panels=[middle1_panel, middle2_panel, rear_panel],
-                               pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SBR[conf_name] = Config_3p2_16x16
-conf_name = '4p'
-Config_4p_16x16 = PanelConfig(name = conf_name, 
-                              panels=[front_panel, middle1_panel, middle2_panel, rear_panel],
-                              pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SBR[conf_name] = Config_4p_16x16
-tel_SBR.panels = Config_4p_16x16.panels
-tel_SBR.pmts = Config_4p_16x16.pmts
-
-##SXF: GW Faille du 30 Août
-tel_name = 'SXF'
-tel_SXF = Telescope(name=tel_name)
-
-tel_SXF.coordinates = np.array([643109,1773943,1275.9]) 
-tel_SXF.azimuth = 352.0 #?
-tel_SXF.zenith = 70 #new 04/2026, before 73
-tel_SXF.elevation = round(90.0-tel_SXF.zenith, 1) 
-tel_SXF.site = "Faille du 30 Août - Soufrière"
-tel_SXF.color = "purple"
-
-channelmap = ChannelMap(file=str( souf_tel_path / tel_name / "channel_bar_map" / "mapping.json"))
-front_panel = Panel(matrix = matrixv1_1, id=0, position=Position(PositionEnum.Front,0,0), channelmap=channelmap)
-middle1_panel = Panel(matrix = matrixv1_1, id=1, position=Position(PositionEnum.Middle1,1,600), channelmap=channelmap)
-front_middle1_pmt = PMT(id=6, panel=[front_panel, middle1_panel], channelmap=channelmap)
-middle2_panel = Panel(matrix = matrixv1_1, id=2, position=Position(PositionEnum.Middle2,2,1200), channelmap=channelmap)
-rear_panel = Panel(matrix = matrixv1_1, id=3, position=Position(PositionEnum.Rear,3,1800), channelmap=channelmap)
-middle2_rear_pmt = PMT(id=7, panel=[middle2_panel, rear_panel], channelmap=channelmap) 
-conf_name = '3p1'
-Config_3p1_16x16 = PanelConfig(name = conf_name, 
-                               panels=[front_panel, middle1_panel, middle2_panel],
-                               pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SXF[conf_name] = Config_3p1_16x16
-conf_name = '3p2'
-Config_3p2_16x16 = PanelConfig(name = conf_name,
-                               panels=[middle1_panel, middle2_panel, rear_panel],
-                               pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SXF[conf_name] = Config_3p2_16x16
-conf_name = '4p'
-Config_4p_16x16 = PanelConfig(name = conf_name, 
-                              panels=[front_panel, middle1_panel, middle2_panel, rear_panel],
-                              pmts=[front_middle1_pmt, middle2_rear_pmt])
-tel_SXF[conf_name] = Config_4p_16x16
-tel_SXF.panels = Config_4p_16x16.panels
-tel_SXF.pmts = Config_4p_16x16.pmts
+CATALOG_FILE = Path(__file__).with_name("telescopes.yaml")
+RESOURCE_DIR = Path(__file__).parent / "resources"
 
 
-DICT_TEL = { 'SNJ': tel_SNJ, 'BR': tel_BR, 'OM': tel_OM, 'SB': tel_SB, 'COP' : tel_COP, 'SBR': tel_SBR, 'SXF': tel_SXF }
+def get_mapping_file(relative_path: str) -> Path:
+    """Return an internal resource path, with fallback to the legacy structure directory."""
+    candidate = RESOURCE_DIR / relative_path
+    if candidate.exists():
+        return candidate
+
+    parts = Path(relative_path).parts
+    if len(parts) >= 2:
+        legacy_candidate = STRUCT_DIR / parts[0] / "telescope" / Path(*parts[1:])
+        if legacy_candidate.exists():
+            return legacy_candidate
+
+    return candidate
+
+
+def _load_telescope_catalog() -> dict:
+    with open(CATALOG_FILE, "r") as f:
+        content = yaml.load(f, Loader=yaml.SafeLoader)
+    return content or {}
+
+
+def _build_matrix_registry(catalog: dict) -> dict:
+    registry = {}
+    for key, spec in catalog.get("matrices", {}).items():
+        scint_spec = spec["scintillator"]
+        scint = Scintillator(
+            type=scint_spec["type"],
+            length=scint_spec["length_mm"],
+            width=scint_spec["width_mm"],
+            thickness=scint_spec["thickness_mm"],
+        )
+        registry[key] = Matrix(
+            version=spec["version"],
+            scintillator=scint,
+            nbars_x=spec["nbars_x"],
+            nbars_y=spec["nbars_y"],
+            wls_type=spec["wls_type"],
+            fiber_out=spec["fiber_out"],
+        )
+    return registry
+
+
+def _get_channelmap(mapping_key: str, mapping_aliases: dict, cache: dict) -> ChannelMap:
+    relative_path = mapping_aliases[mapping_key]
+    mapping_file = str(get_mapping_file(relative_path))
+    if mapping_file not in cache:
+        cache[mapping_file] = ChannelMap(file=mapping_file)
+    return cache[mapping_file]
+
+
+def _make_panel(panel_spec: dict, matrix_registry: dict, mapping_aliases: dict, cache: dict) -> Panel:
+    return Panel(
+        matrix=matrix_registry[panel_spec["matrix"]],
+        id=panel_spec["id"],
+        channelmap=_get_channelmap(panel_spec["mapping"], mapping_aliases, cache),
+        position=Position(
+            PositionEnum[panel_spec["position"]],
+            panel_spec["index"],
+            panel_spec["z_mm"],
+        ),
+    )
+
+
+def _build_pmts(tel_name: str, panels: list, panel_registry: dict) -> list:
+    if tel_name in {"SBR", "SXF"}:
+        front = panel_registry.get(0)
+        middle1 = panel_registry.get(1)
+        middle2 = panel_registry.get(2)
+        rear = panel_registry.get(3)
+        if all(p is not None for p in (front, middle1, middle2, rear)):
+            channelmap = front.channelmap
+            return [
+                PMT(id=6, panel=[front, middle1], channelmap=channelmap),
+                PMT(id=7, panel=[middle2, rear], channelmap=channelmap),
+            ]
+    return [PMT(id=panel.id, panel=panel, channelmap=panel.channelmap) for panel in panels]
+
+
+def load_telescopes_from_yaml() -> dict:
+    catalog = _load_telescope_catalog()
+    matrix_registry = _build_matrix_registry(catalog)
+    telescopes = {}
+
+    for tel_name, spec in catalog.get("telescopes", {}).items():
+        tel = Telescope(name=tel_name)
+        tel.coordinates = np.array(spec.get("coordinates_utm_m", [None, None, None]), dtype=float)
+        tel.azimuth = float(spec.get("azimuth_deg", 0.0))
+        tel.zenith = float(spec.get("zenith_deg", 0.0))
+        tel.elevation = round(90.0 - tel.zenith, 1)
+        tel.color = spec.get("color", "")
+        tel.site = spec.get("site", "")
+        tel.survey = spec.get("survey", "")
+        tel.flipped = bool(spec.get("flipped", False))
+
+        mapping_aliases = spec.get("mappings", {})
+        chmap_cache = {}
+        panel_registry = {}
+
+        for conf_name, conf_spec in spec.get("configurations", {}).items():
+            config_panels = []
+            for panel_spec in conf_spec.get("panels", []):
+                panel_id = panel_spec["id"]
+                if panel_id not in panel_registry:
+                    panel_registry[panel_id] = _make_panel(panel_spec, matrix_registry, mapping_aliases, chmap_cache)
+                config_panels.append(panel_registry[panel_id])
+
+            pmts = _build_pmts(tel_name, config_panels, panel_registry)
+            tel[conf_name] = PanelConfig(name=conf_name, panels=config_panels, pmts=pmts)
+
+        if "4p" in tel.configurations:
+            default_conf = tel["4p"]
+        else:
+            default_conf = next(iter(tel.configurations.values()))
+        tel.panels = default_conf.panels
+        tel.pmts = default_conf.pmts
+        telescopes[tel_name] = tel
+
+    return telescopes
+
+
+CATALOG = _load_telescope_catalog()
+MATRIX_REGISTRY = _build_matrix_registry(CATALOG)
+
+scint_Fermi = MATRIX_REGISTRY["v1_1"].scintillator
+scint_JINR = MATRIX_REGISTRY["v2_0"].scintillator
+matrixv1_1 = MATRIX_REGISTRY["v1_1"]
+matrixv2_0 = MATRIX_REGISTRY["v2_0"]
+
+DICT_TEL = load_telescopes_from_yaml()
+
+# Backward-compatible named exports
+for _tel_name, _tel in DICT_TEL.items():
+    globals()[f"tel_{_tel_name}"] = _tel
+
+tel_BR = DICT_TEL.get("BR")
+tel_COP = DICT_TEL.get("COP")
+tel_OM = DICT_TEL.get("OM")
+tel_SB = DICT_TEL.get("SB")
+tel_SNJ = DICT_TEL.get("SNJ")
+tel_SBR = DICT_TEL.get("SBR")
+tel_SXF = DICT_TEL.get("SXF")
 
 
 def str2telescope(v):

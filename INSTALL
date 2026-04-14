@@ -1,6 +1,7 @@
 # Path settings
-- Edit global paths to data and terrain structure in ```config/config.yaml``` 
-- Edit ```CURRENT_SURVEY```  in the ```survey/survey.py``` module (either ```soufriere``` or ```copahue```, default is ```soufriere```). 
+- Default portable paths are defined in [config/config.yaml](config/config.yaml).
+- Local machine overrides can be added in a non-versioned file created from [config/config.local.yaml.example](config/config.local.yaml.example).
+- The default survey is controlled from the configuration file; there is no need to edit [survey/survey.py](survey/survey.py) manually anymore.
 
 # Installation Guide for the Tomomu Muography Processing Package
 
@@ -56,17 +57,18 @@ Once activated, your shell prompt should show the environment name, e.g. `(venv)
 
 ## 3. Install the Package and Its Dependencies
 
-Install the package using `pip`:
+Install the package from the repository root:
 
 ```bash
-python -m pip install /path/to/pytomomu
+python -m pip install .
 ```
 
-Replace `/path/to/pytomomu` with the local path to the package source directory.
-
 > **Tip:**
-> Run this command again after modifying the package source code to update the installation.
-
+> If you are actively modifying the source code, use editable mode instead:
+>
+> ```bash
+> python -m pip install -e .
+> ```
 ---
 
 ## 4. Deactivate the Virtual Environment
@@ -91,16 +93,20 @@ python -m pip install -r requirements.txt
 
 ## 6. Verify the Installation
 
-To check that the package is correctly installed, try importing it in Python:
+To check that the package is correctly installed, try importing the main modules:
 
 ```bash
-python
->>> import pytomomu
->>> print(pytomomu.__version__)
+python - <<'PY'
+import config
+import telescope
+import survey
+print(config.DEFAULT_SURVEY)
+print(sorted(telescope.DICT_TEL.keys()))
+print(survey.CURRENT_SURVEY.name)
+PY
 ```
 
 If no error appears, the installation was successful.
-
 ---
 
 ## 7. Troubleshooting
@@ -110,7 +116,7 @@ Here are some common installation issues and how to fix them:
 ### ❌ `python: command not found` or `python3: command not found`
 
 Python is not installed or not in your system path.
-→ Install Python 3.9 or higher from [https://www.python.org/downloads/](https://www.python.org/downloads/)
+→ Install Python 3.10 or higher from [https://www.python.org/downloads/](https://www.python.org/downloads/)
 → On Linux: `sudo apt install python3 python3-venv python3-pip`
 
 ---
@@ -162,4 +168,11 @@ These usually occur when system libraries are missing.
 
 ---
 
-If problems persist, verify your Python version and virtual environment setup, or contact the Tomomu development team.
+## 8. Demo mode and local data
+
+By default, the package can use the lightweight inputs stored under [sample](sample).
+For full production processing, point the configuration to your local heavy data folders using either:
+- [config/config.local.yaml.example](config/config.local.yaml.example) copied to a local override file, or
+- the environment variables PYMUSOUF_DATA_DIR, PYMUSOUF_STRUCT_DIR, and PYMUSOUF_SAMPLE_DIR.
+
+If problems persist, verify your Python version, virtual environment setup, and local path configuration.
