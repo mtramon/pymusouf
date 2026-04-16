@@ -435,7 +435,7 @@ class EventStream:
         self.tel = telescope
         self.data = data
         self.entry_start = entry_start
-        self.nev_max = nev_max
+        self.nev_max = None if int(nev_max) <= 0 else int(nev_max)
         self.maxPlan = None if telescope.name != "SXF" else 7
         self.nev_tot = 0
         self.pmts = {pm.id: pm for pm in self.tel.pmts}
@@ -448,10 +448,10 @@ class EventStream:
         last_evt_id = None
 
         for file in self.data.dataset:
-            if self.nev_tot >= self.nev_max:
+            if self.nev_max is not None and self.nev_tot >= self.nev_max:
                 break
             for line in self.data.readfile(file):
-                if self.nev_tot >= self.nev_max:
+                if self.nev_max is not None and self.nev_tot >= self.nev_max:
                     break
                 try:
                     impm = ImpactPM(line=line)
@@ -475,7 +475,7 @@ class EventStream:
                     last_evt_id = impm.evt_id
                 evt.impacts.update(impm.panel_impacts)
 
-        if evt is not None and self.nev_tot < self.nev_max:
+        if evt is not None and (self.nev_max is None or self.nev_tot < self.nev_max):
             self.nev_tot += 1
             yield evt
 

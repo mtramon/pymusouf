@@ -16,7 +16,7 @@ def set_processing_parser():
                         type=int)
     parser.add_argument('--nevents', '-nev', 
                         default=saved_args.get("nevents", int(1e4)), 
-                        help="Max number of events to reconstruct", 
+                        help="Max number of events to reconstruct; use 0 for no cap", 
                         type=int)
     parser.add_argument('--ndisplays', '-nd', 
                         default=saved_args.get("ndisplays", 0), 
