@@ -23,7 +23,10 @@ class RawData:
         return str(file).endswith(".gz")
 
     def listdatafiles(self, path: Path, nfiles=None, fmt="dat"):
-        files = sorted(path.glob(f"*{fmt}*"))
+        files = sorted(
+            p for p in path.rglob(f"*{fmt}*")
+            if p.is_file()
+        )
         self.nfiles_tot = len(files)
         if nfiles is None or int(nfiles) <= 0:
             return files
