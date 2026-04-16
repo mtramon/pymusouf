@@ -11,6 +11,7 @@ ROOT = Path(__file__).parent
 REQUIREMENTS = [
     # 'iminuit', #fit in 'utils/functions.py'
     'matplotlib',
+    'cmcrameri', # scientific colormaps
     'mat73', #read v7.3 mat files
     'numba', #for multiprocessing
     'numpy',

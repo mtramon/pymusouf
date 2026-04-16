@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import cmcrameri.cm as cmc
 from matplotlib.colors import LogNorm, Normalize
 from mpl_toolkits.axes_grid1 import make_axes_locatable, inset_locator
 import numpy as np 
@@ -118,7 +119,7 @@ if __name__ == "__main__":
         h, bx, by = l_h2d[i]
         h = np.flipud(h) if (tel.name == "SXF") or (tel.name == "OM") else h
         # im = ax.imshow(h, norm=LogNorm(1, vmax))
-        im = ax.pcolormesh(bx, by, h, norm=LogNorm(1, vmax))
+        im = ax.pcolormesh(bx, by, h, norm=LogNorm(1, vmax), cmap=cmc.batlow)
         if i == len(axs.ravel())-1:
             # divider = make_axes_locatable(ax)
             # cax = divider.append_axes("right", size="5%", pad=0.1)
@@ -206,7 +207,7 @@ if __name__ == "__main__":
                 ax.set_title(tel.name + "-" + c)
             h2d, ex, ey = np.histogram2d(df[f"mip_score_{coord}"][mask_conf], df["rms"][mask_conf], bins=50)
             bx, by = (ex[:-1] + ex[1:]) / 2, (ey[:-1] + ey[1:]) / 2
-            ax.pcolormesh(bx, by, h2d.T, norm=LogNorm(1, np.max(h2d)))
+            ax.pcolormesh(bx, by, h2d.T, norm=LogNorm(1, np.max(h2d)), cmap=cmc.batlow)
             ax.set_xlabel("mip_score_" + coord)
             ax.set_ylabel("RMS [mm]") 
     file_out = dir_out / "rms_vs_mip_scores.png"
