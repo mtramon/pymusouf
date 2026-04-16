@@ -197,8 +197,9 @@ if __name__ == "__main__":
     for j,(c, conf) in enumerate(dict_conf.items()):
         mask_conf = (df['config'] == c) 
         for i, coord in enumerate(["x","y"]):
-            if i==0: ax.set_title( tel.name + "-" + c)
             ax = axs[i,j]
+            if i == 0:
+                ax.set_title(tel.name + "-" + c)
             h2d, ex, ey = np.histogram2d(df[f"mip_score_{coord}"][mask_conf], df["rms"][mask_conf], bins=50)
             bx, by = (ex[:-1] + ex[1:]) / 2, (ey[:-1] + ey[1:]) / 2
             ax.pcolormesh(bx, by, h2d.T, norm=LogNorm(1, np.max(h2d)))
