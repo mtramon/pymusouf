@@ -1,0 +1,8 @@
+default_survey: soufriere
+
+paths:
+  data: /data/mtramontini/pymusouf
+
+runtime:
+  use_sample_data: false
+  create_missing_dirs: true
