@@ -25,7 +25,9 @@ class RawData:
     def listdatafiles(self, path: Path, nfiles=None, fmt="dat"):
         files = sorted(path.glob(f"*{fmt}*"))
         self.nfiles_tot = len(files)
-        return files if nfiles is None else files[:nfiles]
+        if nfiles is None or int(nfiles) <= 0:
+            return files
+        return files[:nfiles]
 
     def fill_dataset(self, **args):
         if self.path.is_file():

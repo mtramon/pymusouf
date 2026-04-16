@@ -7,8 +7,8 @@ def set_processing_parser():
     saved_args = load_args_cache()
     parser = set_common_parser()
     parser.add_argument('--nfiles', '-nf', 
-                        default=saved_args.get("nfiles", 1), 
-                        help="Maximum number of files to process",
+                        default=saved_args.get("nfiles", 0), 
+                        help="Maximum number of files to process; use 0 for all available files",
                         type=int)
     parser.add_argument('--entry_start', '-e0', 
                         default=saved_args.get("entry_start", 0), 
