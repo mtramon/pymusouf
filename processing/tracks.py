@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import matplotlib
+matplotlib.use("Agg")
 import logging
 import time
 #package module(s)
