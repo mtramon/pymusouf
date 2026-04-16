@@ -1,20 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from argparse import ArgumentError
-import numpy as np
+import argparse
+from datetime import datetime
+import glob
+import gzip
+import json
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import SubplotSpec
 from mpl_toolkits.mplot3d import axes3d
-import sys
+import numpy as np
 import os
-import gzip
+import palettable
+import pandas as pd
+from pathlib import Path
+import sys
 from scipy.interpolate import griddata
 from scipy.interpolate import InterpolatedUnivariateSpline as spline
-import glob
-import pandas as pd
-import argparse
-import json
+
+cm_batlow = palettable.scientific.sequential.Batlow_20.mpl_colormap
+
+def format_time(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+def get_file_datetime(file:Path|str):
+    if isinstance(file, str): file=Path(file)
+    if not file.exists(): return None #raise FileNotFoundError(f"{file} not found.")
+    dt = datetime.fromtimestamp(file.stat().st_mtime)
+    return dt
+
+def print_file_datetime(file:Path|str): print(f"Load {file} -- {get_file_datetime(file)}")
 
 
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_length=100):
@@ -39,14 +56,12 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, bar_lengt
         sys.stdout.write('\n')
     sys.stdout.flush()
     
-
 def my_import(name):
     components = name.split('.')
     mod = __import__(components[0])
     for comp in components[1:]:
         mod = getattr(mod, comp)
     return mod
-
 
 def create_subtitle(fig: plt.Figure, grid: SubplotSpec, title: str):
     "Sign sets of subp with title"
@@ -72,7 +87,7 @@ def merge_files(recodir:str, filename:str, type:str, ext:str, prefix:str="out")-
         df.to_csv(outfile,  sep='\t') #index=False,
     elif ext=='json.gz': 
         merge_dict(files=chunck_files, outfile=outfile, compression=True)            
-    else: raise ArgumentError("Unknown file ext (need to modify the merge_files() function).")
+    else: raise argparse.ArgumentError("Unknown file ext (need to modify the merge_files() function).")
     
     return outfile
 
@@ -412,6 +427,46 @@ def wrapToPi(x):
     mask3 = np.remainder(x, 2 * np.pi) != 0
     xwrap[mask1 & mask2 & mask3] -= 2 * np.pi
     return xwrap
+
+
+def check_array_order(arr: np.ndarray) -> str:
+    """
+    Vérifie l'ordonnancement mémoire d'un array NumPy.
+    
+    Retourne:
+        "C" si C-contiguous (row-major)
+        "F" si Fortran-contiguous (column-major)
+        "CF" si les deux
+        "None" si aucun des deux
+    """
+    if arr.flags['C_CONTIGUOUS'] and arr.flags['F_CONTIGUOUS']:
+        return "CF"
+    elif arr.flags['C_CONTIGUOUS']:
+        return "C"
+    elif arr.flags['F_CONTIGUOUS']:
+        return "F"
+    else:
+        return "None"
+
+def ask_yes_no(question, default="n"):
+    """Prompt the user with a yes/no question and return a boolean."""
+    default = default.lower()
+    choices = "Y/n" if default == "y" else "y/N"
+
+    while True:
+        try:
+            answer = input(f"{question} [{choices}]: ").strip().lower()
+        except EOFError:
+            return default == "y"
+
+        if answer == "":
+            return default == "y"
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no"}:
+            return False
+
+        print("Please answer with 'y' or 'n'.")
 
 
 if __name__=="__main__":

@@ -1,0 +1,44 @@
+soufriere:
+  dem: soufriere/dem/topo_roi.vts
+  telescope:
+    SB:
+      run:
+        tomo: soufriere/SB/tomo
+        calib: soufriere/SB/calib
+
+    SNJ:
+      run:
+        tomo: soufriere/SNJ/tomo
+        calib: soufriere/SNJ/calib
+
+    SXF:
+      run:
+        tomo: soufriere/SXF/tomo
+        calib: soufriere/SXF/calib
+
+    BR:
+      run:
+        tomo_2015: soufriere/BR/tomo_2015
+        tomo_2016: soufriere/BR/tomo_2016
+        tomo_2017: soufriere/BR/tomo_2017
+        tomo_2018: soufriere/BR/tomo_2018
+        tomo_2019: soufriere/BR/tomo_2019
+        calib: soufriere/BR/calib
+
+    SBR:
+      run:
+        tomo: soufriere/SBR/tomo
+        calib: soufriere/SBR/calib
+
+    OM:
+      run:
+        tomo: soufriere/OM/tomo
+        calib: soufriere/OM/calib
+
+copahue:
+  dem: copahue/dem/copahue_surface_5m.npy
+  telescope:
+    COP:
+      run:
+        tomo: copahue/COP/tomo
+        calib: copahue/COP/calib

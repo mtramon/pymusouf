@@ -1,0 +1,13 @@
+# Optional local override file.
+# Copy to config.local.yaml and adapt to your machine.
+
+default_survey: soufriere
+
+paths:
+  data: /absolute/path/to/your/data
+  structure: /absolute/path/to/your/structure
+  sample: ./sample
+
+runtime:
+  use_sample_data: false
+  create_missing_dirs: true

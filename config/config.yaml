@@ -1,0 +1,10 @@
+default_survey: soufriere
+
+paths:
+  data: ./data_link
+  structure: ./struct_link
+  sample: ./sample
+
+runtime:
+  use_sample_data: true
+  create_missing_dirs: true
