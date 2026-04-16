@@ -48,6 +48,10 @@ if __name__ == "__main__":
     print_file_datetime(file_track)
     dir_out = cmn.run.dirs["png"] 
     df = pd.read_csv(file_track)
+    if df.empty:
+        print(f"No reconstructed tracks found in {file_track}.")
+        print("Run tracking on more events or on the full dataset before generating plots.")
+        raise SystemExit(0)
     df.set_index("event_id", inplace=True)
     
     # '''
