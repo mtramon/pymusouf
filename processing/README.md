@@ -46,6 +46,7 @@ This is the simplest case.
 
 7. **Check the outputs**
    The main output is the reconstructed dataframe `df_track.csv.gz` in the `reco` subfolder of the selected run.
+   It keeps `timestamp` as integer epoch seconds and adds `nanotime`, the per-event mean of the raw sub-second timestamp field stored in integer 10 ns ticks.
    A log file is also written in the `log` subfolder.
 
 ### Case 2 — the telescope is not present in the catalogue
@@ -104,6 +105,7 @@ See also [cli/common_args.py](../cli/common_args.py) and [cli/processing_args.py
 ## Output
 
 The reconstruction generates a compressed dataframe named `df_track.csv.gz` containing per-event tracking observables for each panel configuration.
+The exported timing columns are `timestamp` for integer epoch seconds and `nanotime` for the per-event mean of the raw third timestamp field, rounded to the nearest integer 10 ns tick.
 
 During reconstruction, the script also creates a local `.args_cache.json` file to reuse argument defaults between runs.
 
